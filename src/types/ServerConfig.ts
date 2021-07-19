@@ -1,7 +1,7 @@
 import { DurationInSeconds } from './Common';
 import { MeshCluster } from './Mesh';
 
-export type IstioLabelKey = 'appLabelName' | 'versionLabelName' | 'injectionLabelName';
+export type IstioLabelKey = 'appLabelName' | 'versionLabelName' | 'injectionLabelName' | 'injectionLabelRev';
 
 interface iter8Config {
   enabled: boolean;
@@ -21,7 +21,25 @@ interface IstioAnnotations {
   istioInjectionAnnotation: string;
 }
 
+interface GraphFindOption {
+  description: string;
+  expression: string;
+}
+
+interface GraphTraffic {
+  grpc: string;
+  http: string;
+  tcp: string;
+}
+
+interface GraphUIDefaults {
+  findOptions: GraphFindOption[];
+  hideOptions: GraphFindOption[];
+  traffic: GraphTraffic;
+}
+
 interface UIDefaults {
+  graph: GraphUIDefaults;
   metricsPerRefresh?: string;
   namespaces?: string[];
   refreshInterval?: string;
@@ -29,7 +47,13 @@ interface UIDefaults {
 
 interface KialiFeatureFlags {
   istioInjectionAction: boolean;
+  istioUpgradeAction: boolean;
   uiDefaults?: UIDefaults;
+}
+
+interface IstioCanaryRevision {
+  current: string;
+  upgrade: string;
 }
 
 /*
@@ -68,9 +92,9 @@ export interface ServerConfig {
   healthConfig: HealthConfig;
   installationTag?: string;
   istioAnnotations: IstioAnnotations;
+  istioCanaryRevision: IstioCanaryRevision;
   istioIdentityDomain: string;
   istioNamespace: string;
-  istioComponentNamespaces?: Map<string, string>;
   istioLabels: { [key in IstioLabelKey]: string };
   kialiFeatureFlags: KialiFeatureFlags;
   prometheus: {

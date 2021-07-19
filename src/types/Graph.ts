@@ -22,21 +22,135 @@ export enum Protocol {
 
 export interface SummaryPanelPropType {
   data: SummaryData;
-  namespaces: Namespace[];
+  duration: DurationInSeconds;
   graphType: GraphType;
   injectServiceNodes: boolean;
+  namespaces: Namespace[];
   queryTime: TimeInSeconds;
-  duration: DurationInSeconds;
-  step: number;
   rateInterval: string;
+  step: number;
+  trafficRates: TrafficRate[];
 }
 
 export enum EdgeLabelMode {
-  NONE = 'noLabel',
-  REQUEST_RATE = 'requestRate',
-  REQUEST_DISTRIBUTION = 'requestDistribution',
-  RESPONSE_TIME_95TH_PERCENTILE = 'responseTime'
+  RESPONSE_TIME_GROUP = 'responseTime',
+  RESPONSE_TIME_AVERAGE = 'avg',
+  RESPONSE_TIME_P50 = 'rt50',
+  RESPONSE_TIME_P95 = 'rt95',
+  RESPONSE_TIME_P99 = 'rt99',
+  THROUGHPUT_GROUP = 'throughput',
+  THROUGHPUT_REQUEST = 'throughputRequest',
+  THROUGHPUT_RESPONSE = 'throughputResponse',
+  TRAFFIC_DISTRIBUTION = 'trafficDistribution',
+  TRAFFIC_RATE = 'trafficRate'
 }
+
+export const isResponseTimeMode = (mode: EdgeLabelMode): boolean => {
+  return (
+    mode === EdgeLabelMode.RESPONSE_TIME_GROUP ||
+    mode === EdgeLabelMode.RESPONSE_TIME_AVERAGE ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P50 ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P95 ||
+    mode === EdgeLabelMode.RESPONSE_TIME_P99
+  );
+};
+
+export const isThroughputMode = (mode: EdgeLabelMode): boolean => {
+  return (
+    mode === EdgeLabelMode.THROUGHPUT_GROUP ||
+    mode === EdgeLabelMode.THROUGHPUT_REQUEST ||
+    mode === EdgeLabelMode.THROUGHPUT_RESPONSE
+  );
+};
+
+export const numLabels = (modes: EdgeLabelMode[]): number => {
+  return modes.filter(m => m !== EdgeLabelMode.RESPONSE_TIME_GROUP && m !== EdgeLabelMode.THROUGHPUT_GROUP).length;
+};
+
+export enum TrafficRate {
+  GRPC_GROUP = 'grpc',
+  GRPC_RECEIVED = 'grpcReceived', // response_messages
+  GRPC_REQUEST = 'grpcRequest',
+  GRPC_SENT = 'grpcSent', // request_messages
+  GRPC_TOTAL = 'grpcTotal', // sent_bytes + received_bytes
+  HTTP_GROUP = 'http',
+  HTTP_REQUEST = 'httpRequest',
+  TCP_GROUP = 'tcp',
+  TCP_RECEIVED = 'tcpReceived', // received_bytes
+  TCP_SENT = 'tcpSent', // sent_bytes
+  TCP_TOTAL = 'tcpTotal' // sent_bytes + received_bytes
+}
+
+export const DefaultTrafficRates: TrafficRate[] = [
+  TrafficRate.GRPC_GROUP,
+  TrafficRate.GRPC_REQUEST,
+  TrafficRate.HTTP_GROUP,
+  TrafficRate.HTTP_REQUEST,
+  TrafficRate.TCP_GROUP,
+  TrafficRate.TCP_SENT
+];
+
+export const isGrpcRate = (rate: TrafficRate): boolean => {
+  return (
+    rate === TrafficRate.GRPC_GROUP ||
+    rate === TrafficRate.GRPC_RECEIVED ||
+    rate === TrafficRate.GRPC_REQUEST ||
+    rate === TrafficRate.GRPC_SENT ||
+    rate === TrafficRate.GRPC_TOTAL
+  );
+};
+
+export const toGrpcRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'received':
+      return TrafficRate.GRPC_RECEIVED;
+    case 'requests':
+    case 'request':
+      return TrafficRate.GRPC_REQUEST;
+    case 'sent':
+      return TrafficRate.GRPC_SENT;
+    case 'total':
+      return TrafficRate.GRPC_TOTAL;
+    default:
+      return undefined;
+  }
+};
+
+export const isHttpRate = (rate: TrafficRate): boolean => {
+  return rate === TrafficRate.HTTP_GROUP || rate === TrafficRate.HTTP_REQUEST;
+};
+
+export const toHttpRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'requests':
+    case 'request':
+      return TrafficRate.HTTP_REQUEST;
+    default:
+      return undefined;
+  }
+};
+
+export const isTcpRate = (rate: TrafficRate): boolean => {
+  return (
+    rate === TrafficRate.TCP_GROUP ||
+    rate === TrafficRate.TCP_RECEIVED ||
+    rate === TrafficRate.TCP_SENT ||
+    rate === TrafficRate.TCP_TOTAL
+  );
+};
+
+export const toTcpRate = (rate: string): TrafficRate | undefined => {
+  switch (rate) {
+    case 'received':
+      return TrafficRate.TCP_RECEIVED;
+    case 'sent':
+      return TrafficRate.TCP_SENT;
+    case 'total':
+      return TrafficRate.TCP_TOTAL;
+    default:
+      return undefined;
+  }
+};
 
 export enum GraphType {
   APP = 'app',
@@ -60,6 +174,7 @@ export enum NodeType {
   WORKLOAD = 'workload'
 }
 
+export const CLUSTER_DEFAULT = 'Kubernetes'; // Istio default cluster, typically indicates a single-cluster env
 export const UNKNOWN = 'unknown';
 
 export interface NodeParamsType {
@@ -79,14 +194,13 @@ export interface NodeParamsType {
 export const CytoscapeGlobalScratchNamespace = '_global';
 export type CytoscapeGlobalScratchData = {
   activeNamespaces: Namespace[];
-  boxByCluster: boolean;
-  boxByNamespace: boolean;
-  edgeLabelMode: EdgeLabelMode;
+  homeCluster: string;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
-  showCircuitBreakers: boolean;
   showMissingSidecars: boolean;
   showSecurity: boolean;
   showVirtualServices: boolean;
+  trafficRates: TrafficRate[];
 };
 
 export interface CytoscapeBaseEvent {
@@ -166,8 +280,9 @@ export interface DestService {
 }
 
 export interface SEInfo {
-  location: string;
   hosts: string[];
+  location: string;
+  namespace: string; // namespace represents where the ServiceEntry object is defined and not necessarily the namespace of the node.
 }
 
 // Node data expected from server
@@ -186,9 +301,14 @@ export interface GraphNodeData {
   destServices?: DestService[];
   traffic?: ProtocolTraffic[];
   hasCB?: boolean;
-  hasMissingSC?: boolean;
-  hasVS?: boolean;
+  hasFaultInjection?: boolean;
   hasHealthConfig?: HealthAnnotationType;
+  hasMissingSC?: boolean;
+  hasRequestRouting?: boolean;
+  hasRequestTimeout?: boolean;
+  hasTCPTrafficShifting?: boolean;
+  hasTrafficShifting?: boolean;
+  hasVS?: boolean;
   isBox?: string;
   isDead?: boolean;
   isIdle?: boolean;
@@ -268,19 +388,19 @@ export interface DecoratedGraphEdgeData extends GraphEdgeData {
   httpNoResponse: number;
   httpPercentErr: number;
   httpPercentReq: number;
+  protocol: ValidProtocols;
   responses: Responses;
   tcp: number;
-  protocol: ValidProtocols;
 
   // During the decoration process, we make non-optional some number attributes (giving them a default value)
-  // Default value NaN
-  responseTime: number;
-
-  // Default value -1
-  isMTLS: number;
-
   // computed, true if traffic rate > 0
   hasTraffic?: boolean;
+  // Default value -1
+  isMTLS: number;
+  // Default value NaN
+  responseTime: number;
+  // Default value NaN
+  throughput: number;
 }
 
 export interface DecoratedGraphNodeWrapper {

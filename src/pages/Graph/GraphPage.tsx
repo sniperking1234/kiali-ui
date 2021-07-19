@@ -21,7 +21,8 @@ import {
   NodeType,
   SummaryData,
   UNKNOWN,
-  BoxByType
+  BoxByType,
+  TrafficRate
 } from '../../types/Graph';
 import { computePrometheusRateParams } from '../../services/Prometheus';
 import * as AlertUtils from '../../utils/AlertUtils';
@@ -36,13 +37,14 @@ import SummaryPanel from './SummaryPanel';
 import {
   activeNamespacesSelector,
   durationSelector,
-  edgeLabelModeSelector,
+  edgeLabelsSelector,
   graphTypeSelector,
   lastRefreshAtSelector,
   meshWideMTLSEnabledSelector,
   refreshIntervalSelector,
   replayActiveSelector,
-  replayQueryTimeSelector
+  replayQueryTimeSelector,
+  trafficRatesSelector
 } from '../../store/Selectors';
 import { KialiAppState } from '../../store/Store';
 import { KialiAppAction } from '../../actions/KialiAppAction';
@@ -82,7 +84,7 @@ type ReduxProps = {
   boxByNamespace: boolean;
   compressOnHide: boolean;
   duration: DurationInSeconds; // current duration (dropdown) setting
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   endTour: () => void;
   graphType: GraphType;
   isPageVisible: boolean;
@@ -100,7 +102,6 @@ type ReduxProps = {
   setNode: (node?: NodeParamsType) => void;
   setTraceId: (traceId?: string) => void;
   setUpdateTime: (val: TimeInMilliseconds) => void;
-  showCircuitBreakers: boolean;
   showIdleEdges: boolean;
   showIdleNodes: boolean;
   showLegend: boolean;
@@ -113,6 +114,7 @@ type ReduxProps = {
   startTour: ({ info: TourInfo, stop: number }) => void;
   summaryData: SummaryData | null;
   trace?: JaegerTrace;
+  trafficRates: TrafficRate[];
   toggleIdleNodes: () => void;
   toggleLegend: () => void;
   updateSummary: (event: CytoscapeClickEvent) => void;
@@ -279,23 +281,8 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
     this.state = {
       graphData: {
         elements: { edges: [], nodes: [] },
+        fetchParams: this.graphDataSource.fetchParameters,
         isLoading: true,
-        fetchParams: {
-          namespaces: props.node ? [props.node.namespace] : props.activeNamespaces,
-          boxByCluster: props.boxByCluster,
-          boxByNamespace: props.boxByNamespace,
-          duration: props.duration,
-          edgeLabelMode: props.edgeLabelMode,
-          graphType: props.graphType,
-          includeHealth: true,
-          injectServiceNodes: props.showServiceNodes,
-          node: props.node,
-          queryTime: 0,
-          showIdleEdges: props.showIdleEdges,
-          showIdleNodes: props.showIdleNodes,
-          showOperationNodes: props.showOperationNodes,
-          showSecurity: props.showSecurity
-        },
         timestamp: 0
       }
     };
@@ -320,18 +307,20 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       }
       this.props.setNode(urlNode);
     }
+
     const urlTrace = getTraceId();
     if (urlTrace !== this.props.trace?.traceID) {
       this.props.setTraceId(urlTrace);
     }
-
-    // start the initial graph generation
-    this.loadGraphDataFromBackend();
   }
 
   componentDidUpdate(prev: GraphPageProps) {
-    // schedule an immediate graph fetch if needed
     const curr = this.props;
+
+    // Ensure we initialize the graph. We wait for the first update so that
+    // the toolbar can render and ensure all redux props are updated with URL
+    // settings. That in turn ensures the initial fetchParams are correct.
+    const isInitialLoad = !this.state.graphData.timestamp;
 
     const activeNamespacesChanged = !arrayEquals(
       prev.activeNamespaces,
@@ -343,14 +332,15 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
     if (activeNamespacesChanged) {
       this.props.onNamespaceChange();
     }
-
     if (
+      isInitialLoad ||
       activeNamespacesChanged ||
       prev.boxByCluster !== curr.boxByCluster ||
       prev.boxByNamespace !== curr.boxByNamespace ||
       prev.duration !== curr.duration ||
-      (prev.edgeLabelMode !== curr.edgeLabelMode &&
-        curr.edgeLabelMode === EdgeLabelMode.RESPONSE_TIME_95TH_PERCENTILE) ||
+      (prev.edgeLabels !== curr.edgeLabels && // test for edge labels that invoke graph gen appenders
+        (curr.edgeLabels.includes(EdgeLabelMode.RESPONSE_TIME_GROUP) ||
+          curr.edgeLabels.includes(EdgeLabelMode.THROUGHPUT_GROUP))) ||
       prev.graphType !== curr.graphType ||
       (prev.lastRefreshAt !== curr.lastRefreshAt && curr.replayQueryTime === 0) ||
       prev.replayQueryTime !== curr.replayQueryTime ||
@@ -359,6 +349,7 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       prev.showServiceNodes !== curr.showServiceNodes ||
       prev.showSecurity !== curr.showSecurity ||
       prev.showIdleNodes !== curr.showIdleNodes ||
+      prev.trafficRates !== curr.trafficRates ||
       GraphPage.isNodeChanged(prev.node, curr.node)
     ) {
       this.loadGraphDataFromBackend();
@@ -456,12 +447,13 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
             {this.props.summaryData && (
               <SummaryPanel
                 data={this.props.summaryData}
-                namespaces={this.props.activeNamespaces}
+                duration={this.state.graphData.fetchParams.duration}
                 graphType={this.props.graphType}
                 injectServiceNodes={this.props.showServiceNodes}
-                queryTime={this.state.graphData.timestamp / 1000}
-                duration={this.state.graphData.fetchParams.duration}
                 isPageVisible={this.props.isPageVisible}
+                namespaces={this.props.activeNamespaces}
+                queryTime={this.state.graphData.timestamp / 1000}
+                trafficRates={this.props.trafficRates}
                 {...computePrometheusRateParams(this.props.duration, NUMBER_OF_DATAPOINTS)}
               />
             )}
@@ -588,7 +580,7 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       }
     }
 
-    const targetNode = { ...event, namespace: { name: event.namespace } };
+    const targetNode: NodeParamsType = { ...event, namespace: { name: event.namespace } };
 
     // If, while in the drilled-down graph, the user double clicked the same
     // node as in the main graph, it doesn't make sense to re-load the same view.
@@ -599,12 +591,12 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       return;
     }
 
-    // In case user didn't double-tapped the same node, or if graph is in
+    // In case user didn't double-tap the same node, or if graph is in
     // full graph mode, redirect to the drilled-down graph of the chosen node.
     const urlParams: GraphUrlParams = {
       activeNamespaces: this.state.graphData.fetchParams.namespaces,
       duration: this.state.graphData.fetchParams.duration,
-      edgeLabelMode: this.props.edgeLabelMode,
+      edgeLabels: this.state.graphData.fetchParams.edgeLabels,
       graphLayout: this.props.layout,
       graphType: this.state.graphData.fetchParams.graphType,
       node: targetNode,
@@ -612,7 +604,8 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       showIdleEdges: this.props.showIdleEdges,
       showIdleNodes: this.props.showIdleNodes,
       showOperationNodes: this.props.showOperationNodes,
-      showServiceNodes: this.props.showServiceNodes
+      showServiceNodes: this.props.showServiceNodes,
+      trafficRates: this.state.graphData.fetchParams.trafficRates
     };
 
     // To ensure updated components get the updated URL, update the URL first and then the state
@@ -664,7 +657,7 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       boxByCluster: this.props.boxByCluster,
       boxByNamespace: this.props.boxByNamespace,
       duration: this.props.duration,
-      edgeLabelMode: this.props.edgeLabelMode,
+      edgeLabels: this.props.edgeLabels,
       graphType: this.props.graphType,
       includeHealth: true,
       injectServiceNodes: this.props.showServiceNodes,
@@ -674,7 +667,8 @@ export class GraphPage extends React.Component<GraphPageProps, GraphPageState> {
       showIdleEdges: this.props.showIdleEdges,
       showIdleNodes: this.props.showIdleNodes,
       showOperationNodes: this.props.showOperationNodes,
-      showSecurity: this.props.showSecurity
+      showSecurity: this.props.showSecurity,
+      trafficRates: this.props.trafficRates
     });
   };
 
@@ -697,7 +691,7 @@ const mapStateToProps = (state: KialiAppState) => ({
   boxByNamespace: state.graph.toolbarState.boxByNamespace,
   compressOnHide: state.graph.toolbarState.compressOnHide,
   duration: durationSelector(state),
-  edgeLabelMode: edgeLabelModeSelector(state),
+  edgeLabels: edgeLabelsSelector(state),
   graphType: graphTypeSelector(state),
   isPageVisible: state.globalState.isPageVisible,
   lastRefreshAt: lastRefreshAtSelector(state),
@@ -707,7 +701,6 @@ const mapStateToProps = (state: KialiAppState) => ({
   refreshInterval: refreshIntervalSelector(state),
   replayActive: replayActiveSelector(state),
   replayQueryTime: replayQueryTimeSelector(state),
-  showCircuitBreakers: state.graph.toolbarState.showCircuitBreakers,
   showIdleEdges: state.graph.toolbarState.showIdleEdges,
   showIdleNodes: state.graph.toolbarState.showIdleNodes,
   showLegend: state.graph.toolbarState.showLegend,
@@ -718,7 +711,8 @@ const mapStateToProps = (state: KialiAppState) => ({
   showTrafficAnimation: state.graph.toolbarState.showTrafficAnimation,
   showVirtualServices: state.graph.toolbarState.showVirtualServices,
   summaryData: state.graph.summaryData,
-  trace: state.jaegerState?.selectedTrace
+  trace: state.jaegerState?.selectedTrace,
+  trafficRates: trafficRatesSelector(state)
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => ({

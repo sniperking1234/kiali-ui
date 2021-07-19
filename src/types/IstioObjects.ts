@@ -115,6 +115,8 @@ export interface ValidationStatus {
 export interface ContainerInfo {
   name: string;
   image: string;
+  isProxy: boolean;
+  isReady: boolean;
 }
 
 // 1.6
@@ -876,7 +878,51 @@ export interface WorkloadEntrySpec {
   serviceAccount?: string;
 }
 
-export interface WorkloadEntrySelector {
+export interface WorkloadGroup extends IstioObject {
+  spec: WorkloadGroupSpec;
+}
+
+export interface WorkloadGroupSpec {
+  // Note that WorkloadGroup has a metadata section inside Spec
+  metadata?: K8sMetadata;
+  template: WorkloadEntrySpec;
+  probe?: ReadinessProbe;
+}
+
+export interface ReadinessProbe {
+  initialDelaySeconds?: number;
+  timeoutSeconds?: number;
+  periodSeconds?: number;
+  successThreshold?: number;
+  failureThreshold?: number;
+  httpGet?: HTTPHealthCheckConfig;
+  tcpSocket?: TCPHealthCheckConfig;
+  exec?: ExecHealthCheckConfig;
+}
+
+export interface HTTPHealthCheckConfig {
+  path?: string;
+  port: number;
+  host?: string;
+  scheme?: string;
+  httpHeaders?: HTTPHeader[];
+}
+
+export interface HTTPHeader {
+  name?: string;
+  value?: string;
+}
+
+export interface TCPHealthCheckConfig {
+  host?: string;
+  port: number;
+}
+
+export interface ExecHealthCheckConfig {
+  command?: string[];
+}
+
+export interface WorkloadMatchSelector {
   matchLabels: { [key: string]: string };
 }
 
@@ -903,7 +949,7 @@ export interface RequestAuthentication extends IstioObject {
 
 // 1.6
 export interface RequestAuthenticationSpec {
-  selector?: WorkloadEntrySelector;
+  selector?: WorkloadMatchSelector;
   jwtRules: JWTRule[];
 }
 

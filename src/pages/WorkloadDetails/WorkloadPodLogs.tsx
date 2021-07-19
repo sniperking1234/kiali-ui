@@ -12,7 +12,6 @@ import {
   ToolbarItem,
   Tooltip,
   TooltipPosition,
-  Badge,
   Form,
   FormGroup,
   Dropdown,
@@ -29,12 +28,12 @@ import { RenderComponentScroll } from '../../components/Nav/Page';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { KialiIcon, defaultIconStyle } from '../../config/KialiIcon';
 import screenfull, { Screenfull } from 'screenfull';
-import { serverConfig } from 'config';
 import { KialiAppState } from '../../store/Store';
 import { connect } from 'react-redux';
 import { timeRangeSelector } from '../../store/Selectors';
 import { PFColors, PFColorVal } from 'components/Pf/PfColors';
 import AccessLogModal from 'components/Envoy/AccessLogModal';
+import { PFBadge, PFBadges } from 'components/Pf/PfBadges';
 
 const appContainerColors = [PFColors.White, PFColors.LightGreen400, PFColors.LightBlue400, PFColors.Purple100];
 const proxyContainerColor = PFColors.Gold400;
@@ -46,7 +45,7 @@ export interface WorkloadPodLogsProps {
   lastRefreshAt: TimeInMilliseconds;
 }
 
-interface Container {
+interface ContainerOption {
   color: PFColorVal;
   displayName: string;
   isProxy: boolean;
@@ -56,7 +55,7 @@ interface Container {
 
 interface WorkloadPodLogsState {
   accessLogModals: Map<string, AccessLog>;
-  containers?: Container[];
+  containerOptions?: ContainerOption[];
   filteredLogs: LogEntry[];
   fullscreen: boolean;
   hideError?: string;
@@ -194,11 +193,11 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
 
     const podValue = 0;
     const pod = this.props.pods[podValue];
-    const containers = this.getContainers(pod);
+    const containerOptions = this.getContainerOptions(pod);
 
     this.state = {
       ...defaultState,
-      containers: containers,
+      containerOptions: containerOptions,
       podValue: podValue
     };
   }
@@ -207,23 +206,28 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
     const screenFullAlias = screenfull as Screenfull;
     screenFullAlias.onchange(() => this.setState({ fullscreen: !this.state.fullscreen }));
 
-    if (this.state.containers) {
+    if (this.state.containerOptions) {
       const pod = this.props.pods[this.state.podValue!];
-      this.fetchLogs(this.props.namespace, pod.name, this.state.containers, this.state.tailLines, this.props.timeRange);
+      this.fetchLogs(
+        this.props.namespace,
+        pod.name,
+        this.state.containerOptions,
+        this.state.tailLines,
+        this.props.timeRange
+      );
     }
   }
 
   componentDidUpdate(prevProps: WorkloadPodLogsProps, prevState: WorkloadPodLogsState) {
-    const prevContainers = prevState.containers ? prevState.containers : undefined;
-    const newContainers = this.state.containers ? this.state.containers : undefined;
-    const updateContainerInfo = this.state.containers && this.state.containers !== prevState.containers;
-    const updateContainer = newContainers && newContainers !== prevContainers;
+    const prevContainerOptions = prevState.containerOptions ? prevState.containerOptions : undefined;
+    const newContainerOptions = this.state.containerOptions ? this.state.containerOptions : undefined;
+    const updateContainerOptions = newContainerOptions && newContainerOptions !== prevContainerOptions;
     const updateTailLines = this.state.tailLines && prevState.tailLines !== this.state.tailLines;
     const lastRefreshChanged = prevProps.lastRefreshAt !== this.props.lastRefreshAt;
     const timeRangeChanged = !isEqualTimeRange(this.props.timeRange, prevProps.timeRange);
-    if (updateContainerInfo || updateContainer || updateTailLines || lastRefreshChanged || timeRangeChanged) {
+    if (updateContainerOptions || updateTailLines || lastRefreshChanged || timeRangeChanged) {
       const pod = this.props.pods[this.state.podValue!];
-      this.fetchLogs(this.props.namespace, pod.name, newContainers!, this.state.tailLines, this.props.timeRange);
+      this.fetchLogs(this.props.namespace, pod.name, newContainerOptions!, this.state.tailLines, this.props.timeRange);
     }
 
     if (prevState.useRegex !== this.state.useRegex) {
@@ -249,7 +253,7 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
     return (
       <>
         <RenderComponentScroll>
-          {this.state.containers && (
+          {this.state.containerOptions && (
             <Grid key="logs" id="logs" style={{ height: '100%' }}>
               <GridItem span={12}>
                 <Card style={{ height: '100%' }}>
@@ -257,9 +261,7 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
                     {this.state.showToolbar && (
                       <Toolbar className={toolbar}>
                         <ToolbarGroup>
-                          <Tooltip position={TooltipPosition.top} content={<>Pod</>}>
-                            <Badge className="virtualitem_badge_definition">P</Badge>
-                          </Tooltip>
+                          <PFBadge badge={PFBadges.Pod} position={TooltipPosition.top} />
                           <ToolbarItem className={displayFlex}>
                             <ToolbarDropdown
                               id={'wpl_pods'}
@@ -358,12 +360,12 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
     return (
       <Form>
         <FormGroup fieldId="container-log-selection" isInline>
-          <Tooltip position={TooltipPosition.top} content={<>Containers</>}>
-            <Badge className="virtualitem_badge_definition" style={{ marginRight: '10px' }}>
-              C
-            </Badge>
-          </Tooltip>
-          {this.state.containers!.map((c, i) => {
+          <PFBadge
+            badge={{ badge: PFBadges.Container.badge, tt: 'Containers' }}
+            style={{ marginRight: '10px' }}
+            position={TooltipPosition.top}
+          />
+          {this.state.containerOptions!.map((c, i) => {
             return (
               <div key={`c-d-${i}`} className="pf-c-check">
                 <input
@@ -396,9 +398,9 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
     );
   };
 
-  private toggleSelected = (c: Container) => {
+  private toggleSelected = (c: ContainerOption) => {
     c.isSelected = !c.isSelected;
-    this.setState({ containers: [...this.state.containers!] });
+    this.setState({ containerOptions: [...this.state.containerOptions!] });
   };
 
   private getLogsDiv = () => {
@@ -471,36 +473,6 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
         >
           {this.hasEntries(this.state.filteredLogs)
             ? this.state.filteredLogs.map((le, i) => {
-                /*
-              if (!le.accessLog && le.message.startsWith('[2021')) {
-                le.accessLog = {
-                  authority: 'foo',
-                  bytes_received: 'foo',
-                  bytes_sent: 'foo',
-                  duration: 'foo',
-                  forwarded_for: 'foo',
-                  method: 'foo',
-                  protocol: 'foo',
-                  request_id: 'foo',
-                  response_flags: 'foo',
-                  status_code: 'foo',
-                  tcp_service_time: 'foo',
-                  timestamp: 'foo',
-                  upstream_service: 'foo',
-                  upstream_service_time: 'foo',
-                  upstream_cluster: 'foo',
-                  upstream_local: 'foo',
-                  downstream_local: 'foo',
-                  downstream_remote: 'foo',
-                  requested_server: 'foo',
-                  route_name: 'foo',
-                  upstream_failure_reason: 'foo',
-                  uri_param: 'foo',
-                  uri_path: 'foo',
-                  user_agent: 'foo'
-                };
-              }
-              */
                 return !le.accessLog ? (
                   <>
                     <p key={`le-${i}`} style={{ color: le.color!, fontSize: '12px' }}>
@@ -572,8 +544,8 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
 
   private setPod = (podValue: string) => {
     const pod = this.props.pods[Number(podValue)];
-    const containerNames = this.getContainers(pod);
-    this.setState({ containers: containerNames, podValue: Number(podValue) });
+    const containerNames = this.getContainerOptions(pod);
+    this.setState({ containerOptions: containerNames, podValue: Number(podValue) });
   };
 
   private setTailLines = (tailLines: number) => {
@@ -732,35 +704,34 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
     }
   };
 
-  private getContainers = (pod: Pod): Container[] => {
-    // consistently position the proxy container first, if it (they?) exist.
-    let podContainers = pod.istioContainers || [];
-    let containers = podContainers.map(c => {
+  private getContainerOptions = (pod: Pod): ContainerOption[] => {
+    // sort containers by name, consistently positioning proxy container first.
+    let containers = [...(pod.istioContainers || [])];
+    containers.push(...(pod.containers || []));
+    containers = containers.sort((c1, c2) => {
+      if (c1.isProxy !== c2.isProxy) {
+        return c1.isProxy ? 0 : 1;
+      }
+      return c1.name < c2.name ? 0 : 1;
+    });
+    let appContainerCount = 0;
+    let containerOptions = containers.map(c => {
       const name = c.name;
-      const displayName = c.name;
+      if (c.isProxy) {
+        return { color: proxyContainerColor, displayName: name, isProxy: true, isSelected: true, name: name };
+      }
 
-      return { color: proxyContainerColor, displayName: displayName, isProxy: true, isSelected: true, name: name };
+      const color = appContainerColors[appContainerCount++ % appContainerColors.length];
+      return { color: color, displayName: name, isProxy: false, isSelected: true, name: name };
     });
 
-    podContainers = pod.containers || [];
-    containers.push(
-      ...podContainers.map((c, i) => {
-        const name = c.name;
-        const version = pod.appLabel && pod.labels ? pod.labels[serverConfig.istioLabels.versionLabelName] : undefined;
-        const displayName = !version ? name : `${name}-${version}`;
-        const color = appContainerColors[i % appContainerColors.length];
-
-        return { color: color, isProxy: false, isSelected: true, displayName: displayName, name: name };
-      })
-    );
-
-    return containers;
+    return containerOptions;
   };
 
   private fetchLogs = (
     namespace: string,
     podName: string,
-    containers: Container[],
+    containerOptions: ContainerOption[],
     tailLines: number,
     timeRange: TimeRange
   ) => {
@@ -774,7 +745,7 @@ class WorkloadPodLogs extends React.Component<WorkloadPodLogsProps, WorkloadPodL
       duration = Math.floor(timeRangeDates[1].getTime() / 1000) - sinceTime;
     }
 
-    const selectedContainers = containers.filter(c => c.isSelected);
+    const selectedContainers = containerOptions.filter(c => c.isSelected);
     const containerPromises = selectedContainers.map(c => {
       return getPodLogs(namespace, podName, c.name, tailLines, sinceTime, duration, c.isProxy);
     });

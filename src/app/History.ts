@@ -26,6 +26,7 @@ export enum URLParam {
   GRAPH_IDLE_NODES = 'idleNodes',
   GRAPH_LAYOUT = 'layout',
   GRAPH_SERVICE_NODES = 'injectServiceNodes',
+  GRAPH_TRAFFIC = 'traffic',
   GRAPH_TYPE = 'graphType',
   JAEGER_ERRORS_ONLY = 'errs',
   JAEGER_LIMIT_TRACES = 'limit',
@@ -41,6 +42,7 @@ export enum URLParam {
   REFRESH_INTERVAL = 'refresh',
   REPORTER = 'reporter',
   SHOW_AVERAGE = 'avg',
+  SHOW_SPANS = 'spans',
   SORT = 'sort',
   TO = 'to',
   EXPERIMENTAL_FLAGS = 'xflags'

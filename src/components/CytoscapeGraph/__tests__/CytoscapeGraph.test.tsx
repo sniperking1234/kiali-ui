@@ -3,7 +3,7 @@ import { shallow } from 'enzyme';
 
 import CytoscapeGraph from '../CytoscapeGraph';
 import * as GRAPH_DATA from '../../../services/__mockData__/getGraphElements';
-import { EdgeLabelMode, GraphType, Layout } from '../../../types/Graph';
+import { DefaultTrafficRates, EdgeLabelMode, GraphType, Layout } from '../../../types/Graph';
 import EmptyGraphLayoutContainer from '../EmptyGraphLayout';
 import { decorateGraphData } from '../../../store/Selectors/GraphData';
 import GraphDataSource from '../../../services/GraphDataSource';
@@ -27,7 +27,7 @@ const testSetHandler = () => {
 describe('CytoscapeGraph component test', () => {
   it('should set correct elements data', done => {
     const myLayout: Layout = { name: 'breadthfirst' };
-    const myEdgeLabelMode: EdgeLabelMode = EdgeLabelMode.NONE;
+    const myEdgeLabelMode: EdgeLabelMode[] = [];
 
     const dataSource = new GraphDataSource();
     dataSource.fetchGraphData({
@@ -36,21 +36,20 @@ describe('CytoscapeGraph component test', () => {
       graphType: GraphType.VERSIONED_APP,
       namespaces: [{ name: testNamespace }],
       duration: 60,
-      edgeLabelMode: myEdgeLabelMode,
+      edgeLabels: myEdgeLabelMode,
       queryTime: 0,
       showIdleEdges: false,
       showIdleNodes: false,
       showOperationNodes: false,
-      showSecurity: true
+      showSecurity: true,
+      trafficRates: DefaultTrafficRates
     });
 
     dataSource.on('fetchSuccess', () => {
       const wrapper = shallow(
         <CytoscapeGraph
-          boxByCluster={false}
-          boxByNamespace={false}
           compressOnHide={true}
-          edgeLabelMode={myEdgeLabelMode}
+          edgeLabels={myEdgeLabelMode}
           graphData={{
             elements: dataSource.graphData,
             isLoading: false,
@@ -60,12 +59,13 @@ describe('CytoscapeGraph component test', () => {
               graphType: GraphType.VERSIONED_APP,
               namespaces: [{ name: testNamespace }],
               duration: 60,
-              edgeLabelMode: myEdgeLabelMode,
+              edgeLabels: myEdgeLabelMode,
               queryTime: 0,
               showIdleEdges: false,
               showIdleNodes: false,
               showOperationNodes: false,
-              showSecurity: true
+              showSecurity: true,
+              trafficRates: DefaultTrafficRates
             },
             timestamp: 0
           }}
@@ -77,7 +77,6 @@ describe('CytoscapeGraph component test', () => {
           setActiveNamespaces={testSetHandler}
           setNode={testSetHandler}
           isMTLSEnabled={false}
-          showCircuitBreakers={false}
           showIdleEdges={false}
           showIdleNodes={false}
           showMissingSidecars={true}

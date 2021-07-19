@@ -24,7 +24,6 @@ import { FilterSelected, StatefulFilters } from '../../../../components/Filters/
 import { namespaceEquals } from '../../../../utils/Common';
 import history from '../../../../app/History';
 import {
-  Badge,
   Dropdown,
   DropdownItem,
   DropdownPosition,
@@ -49,6 +48,7 @@ import { activeNamespacesSelector, durationSelector } from '../../../../store/Se
 import { connect } from 'react-redux';
 import DefaultSecondaryMasthead from '../../../../components/DefaultSecondaryMasthead/DefaultSecondaryMasthead';
 import RefreshContainer from '../../../../components/Refresh/Refresh';
+import { PFBadges, PFBadge } from 'components/Pf/PfBadges';
 
 // Style constants
 const containerPadding = style({ padding: '20px 20px 20px 20px' });
@@ -116,8 +116,9 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
       iter8Info: {
         enabled: false,
         supportedVersion: false,
-        controllerImageVersion: '',
-        analyticsImageVersion: ''
+        controllerImgVersion: '',
+        analyticsImgVersion: '',
+        namespace: 'iter8'
       },
       experimentLists: [],
       sortBy: {},
@@ -135,9 +136,18 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
         const iter8Info = result.data;
         if (iter8Info.enabled) {
           if (!iter8Info.supportedVersion) {
+            if (iter8Info.analyticsImgVersion !== '' && iter8Info.analyticsImgVersion.startsWith('2')) {
+              AlertUtils.addError(
+                'Iter8 v' +
+                  iter8Info.analyticsImgVersion +
+                  ' is not supported, please use the supported version (v1.x).'
+              );
+              return;
+            }
             AlertUtils.addError(
-              'You are running an unsupported Iter8 vresion, please upgrade to supported version  (v0.2+) to take advantage of the full features of Iter8 .'
+              'You are running an unsupported Iter8 version, please upgrade to supported version  (v0.2+) to take advantage of the full features of Iter8 .'
             );
+            return;
           }
           if (namespaces.length > 0) {
             API.getExperiments(namespaces)
@@ -155,7 +165,10 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
               });
           }
         } else {
-          AlertUtils.addError('Kiali has Iter8 extension enabled but it is not detected in the cluster');
+          AlertUtils.addError(
+            'Kiali has Iter8 extension enabled but it is not detected in the cluster under namespace ' +
+              iter8Info.namespace
+          );
         }
       })
       .catch(error => {
@@ -432,7 +445,7 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
       let linkTo = '/namespaces/' + namespace + '/workloads/' + name;
       return (
         <>
-          <Badge className={'virtualitem_badge_definition'}>W</Badge>
+          <PFBadge badge={{ badge: 'W' }} />
           <Link to={linkTo}>{name}</Link>
         </>
       );
@@ -441,7 +454,7 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
         let linkTo = '/namespaces/' + namespace + '/services/' + name;
         return (
           <>
-            <Badge className={'virtualitem_badge_definition'}>S</Badge>
+            <PFBadge badge={{ badge: 'S' }} />
             <Link to={linkTo}>{name}</Link>
           </>
         );
@@ -462,14 +475,12 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
       return {
         cells: [
           <>
-            <Tooltip
-              key={'TooltipExtensionIter8Name_' + h.name}
+            <PFBadge
+              key={`TooltipExtensionIter8Name_${h.name}`}
+              badge={PFBadges.Iter8}
               position={TooltipPosition.top}
-              content={<>Iter8 Experiment</>}
-            >
-              <Badge className={'virtualitem_badge_definition'}>IT8</Badge>
-            </Tooltip>
-            <Badge className={'virtualitem_badge_definition'}>{h.experimentKind}</Badge>
+            />
+            <PFBadge badge={{ badge: h.experimentKind }} />
             <Link
               to={`/extensions/namespaces/${h.namespace}/iter8/${h.name}?target=${h.targetService}&startTime=${h.startTime}&endTime=${h.endTime}&baseline=${h.baseline.name}&candidates=${candidates}`}
               key={'Experiment_' + h.namespace + '_' + h.namespace}
@@ -478,13 +489,11 @@ class ExperimentListPageComponent extends React.Component<Props, State> {
             </Link>
           </>,
           <>
-            <Tooltip
-              key={'TooltipExtensionNamespace_' + h.namespace}
+            <PFBadge
+              key={`TooltipExtensionNamespace_${h.namespace}`}
+              badge={PFBadges.Namespace}
               position={TooltipPosition.top}
-              content={<>Namespace</>}
-            >
-              <Badge className={'virtualitem_badge_definition'}>NS</Badge>
-            </Tooltip>
+            />
             {h.namespace}
           </>,
           <>

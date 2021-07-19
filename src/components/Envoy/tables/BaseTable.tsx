@@ -5,10 +5,13 @@ import { RouteSummaryTable, RouteTable } from './RouteTable';
 import { ListenerSummaryTable, ListenerTable } from './ListenerTable';
 import { EnvoyProxyDump } from '../../../types/IstioObjects';
 import { ActiveFiltersInfo, FilterType } from '../../../types/Filters';
-import { FilterSelected, StatefulFilters } from '../../Filters/StatefulFilters';
-import { setFiltersToURL } from '../../FilterList/FilterHelper';
-import { ResourceSorts } from '../EnvoyModal';
+import { StatefulFilters } from '../../Filters/StatefulFilters';
+import { ResourceSorts } from '../EnvoyDetails';
 import Namespace from '../../../types/Namespace';
+import ToolbarDropdown from '../../ToolbarDropdown/ToolbarDropdown';
+import { PFBadge, PFBadges } from '../../Pf/PfBadges';
+import { TooltipPosition } from '@patternfly/react-core';
+import { style } from 'typestyle';
 
 export interface SummaryTable {
   head: () => ICell[];
@@ -19,11 +22,19 @@ export interface SummaryTable {
   availableFilters: () => FilterType[];
 }
 
+const iconStyle = style({
+  display: 'inline-block',
+  verticalAlign: '2px !important'
+});
+
 export function SummaryTableRenderer<T extends SummaryTable>() {
   interface SummaryTableProps<T> {
     writer: T;
     sortBy: ISortBy;
     onSort: (resource: string, columnIndex: number, sortByDirection: SortByDirection) => void;
+    pod: string;
+    pods: string[];
+    setPod: (pod: string) => void;
   }
 
   type SummaryTableState = {
@@ -31,11 +42,6 @@ export function SummaryTableRenderer<T extends SummaryTable>() {
   };
 
   return class SummaryTable extends React.Component<SummaryTableProps<T>, SummaryTableState> {
-    componentWillUnmount() {
-      FilterSelected.resetFilters();
-      setFiltersToURL(this.props.writer.availableFilters(), { filters: [], op: 'and' });
-    }
-
     onSort = (_: React.MouseEvent, columnIndex: number, sortByDirection: SortByDirection) => {
       this.props.writer.setSorting(columnIndex, sortByDirection);
       this.props.onSort(this.props.writer.resource(), columnIndex, sortByDirection);
@@ -53,7 +59,22 @@ export function SummaryTableRenderer<T extends SummaryTable>() {
           <StatefulFilters
             initialFilters={this.props.writer.availableFilters()}
             onFilterChange={this.onFilterApplied}
-          />
+            childrenFirst={true}
+          >
+            <span>
+              <div key="service-icon" className={iconStyle}>
+                <PFBadge badge={PFBadges.Pod} position={TooltipPosition.top} />
+              </div>
+              <ToolbarDropdown
+                id="envoy_pods_list"
+                tooltip="Display envoy config for the selected pod"
+                handleSelect={key => this.props.setPod(key)}
+                value={this.props.pod}
+                label={this.props.pod}
+                options={this.props.pods.sort()}
+              />
+            </span>
+          </StatefulFilters>
           <Table
             aria-label="Sortable Table"
             cells={this.props.writer.head()}
@@ -75,7 +96,9 @@ export const SummaryTableBuilder = (
   config: EnvoyProxyDump,
   sortBy: ResourceSorts,
   namespaces: Namespace[],
-  namespace: string
+  namespace: string,
+  routeLinkHandler: () => void,
+  workload?: string
 ) => {
   let writerComp, writerProps;
 
@@ -86,7 +109,14 @@ export const SummaryTableBuilder = (
       break;
     case 'listeners':
       writerComp = ListenerSummaryTable;
-      writerProps = new ListenerTable(config.listeners || [], sortBy['listeners'], namespaces);
+      writerProps = new ListenerTable(
+        config.listeners || [],
+        sortBy['listeners'],
+        namespaces,
+        namespace,
+        workload,
+        routeLinkHandler
+      );
       break;
     case 'routes':
       writerComp = RouteSummaryTable;

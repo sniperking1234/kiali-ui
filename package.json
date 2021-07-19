@@ -1,6 +1,6 @@
 {
   "name": "@kiali/kiali-ui",
-  "version": "1.34.0",
+  "version": "1.38.0",
   "description": "React UI for [Kiali](https://github.com/kiali/kiali).",
   "keywords": [
     "istio service mesh",
@@ -25,6 +25,7 @@
   "license": "Apache-2.0",
   "author": "Red Hat",
   "main": "index.js",
+  "private": true,
   "publishConfig": {
     "access": "public"
   },
@@ -49,7 +50,8 @@
     "snyk": "snyk test",
     "analyze": "source-map-explorer build/static/js/main.*",
     "prettier": "prettier --write \"{src/**/*.{js,jsx,ts,tsx,json,yml,css,scss},travis.yml,*.json}\"",
-    "snyk-protect": "snyk protect"
+    "snyk-protect": "snyk protect",
+    "storybook": "start-storybook -p 6006 -s public"
   },
   "dependencies": {
     "@patternfly/patternfly": "2.71.6",
@@ -74,7 +76,7 @@
     "eventemitter3": "4.0.0",
     "js-yaml": "3.13.1",
     "json-beautify": "1.0.1",
-    "lodash": "4.17.20",
+    "lodash": "4.17.21",
     "m-react-splitters": "1.2.0",
     "moment": "2.24.0",
     "react": "16.13.1",
@@ -99,10 +101,16 @@
     "visibilityjs": "2.0.2"
   },
   "devDependencies": {
+    "@storybook/addon-actions": "^6.2.9",
+    "@storybook/addon-essentials": "^6.2.9",
+    "@storybook/addon-links": "^6.2.9",
+    "@storybook/node-logger": "^6.2.9",
+    "@storybook/preset-create-react-app": "^3.1.7",
+    "@storybook/react": "^6.2.9",
     "@types/cytoscape": "3.14.0",
     "@types/enzyme": "3.10.5",
     "@types/jest": "23.3.10",
-    "@types/lodash": "4.14.150",
+    "@types/lodash": "4.14.169",
     "@types/node": "12.12.14",
     "@types/react": "16.9.34",
     "@types/react-dom": "16.9.7",
@@ -116,7 +124,7 @@
     "husky": "1.3.1",
     "jest-canvas-mock": "2.2.0",
     "jest-localstorage-mock": "2.4.2",
-    "node-sass": "4.13.1",
+    "node-sass": "5.0.0",
     "prettier": "2.0.5",
     "pretty-quick": "2.0.1",
     "react-scripts": "3.4.1",
@@ -127,10 +135,16 @@
   },
   "resolutions": {
     "ajv": "6.12.3",
+    "babel-loader": "8.1.0",
     "dot-prop": "4.2.1",
+    "elliptic": "6.5.4",
+    "handlebars": "4.7.7",
     "hoist-non-react-statics": "3.3.0",
+    "hosted-git-info": "2.8.9",
     "ini": "1.3.7",
     "kind-of": "6.0.3",
+    "lodash": "4.17.21",
+    "url-parse": "1.5.1",
     "victory": "34.3.12",
     "y18n": "5.0.5"
   },
@@ -152,5 +166,17 @@
     "last 2 versions",
     "not ie <= 11"
   ],
-  "snyk": true
+  "snyk": true,
+  "eslintConfig": {
+    "overrides": [
+      {
+        "files": [
+          "**/*.stories.*"
+        ],
+        "rules": {
+          "import/no-anonymous-default-export": "off"
+        }
+      }
+    ]
+  }
 }

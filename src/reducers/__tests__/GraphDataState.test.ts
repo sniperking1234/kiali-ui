@@ -1,7 +1,7 @@
 import graphDataState from '../GraphDataState';
 import { GraphActions } from '../../actions/GraphActions';
 import { GlobalActions } from '../../actions/GlobalActions';
-import { EdgeLabelMode, GraphType } from '../../types/Graph';
+import { DefaultTrafficRates, GraphType } from '../../types/Graph';
 import { DagreGraph } from '../../components/CytoscapeGraph/graphs/DagreGraph';
 
 describe('GraphDataState', () => {
@@ -15,11 +15,10 @@ describe('GraphDataState', () => {
         boxByCluster: false,
         boxByNamespace: false,
         compressOnHide: true,
-        edgeLabelMode: EdgeLabelMode.NONE,
+        edgeLabels: [],
         findValue: '',
         graphType: GraphType.VERSIONED_APP,
         hideValue: '',
-        showCircuitBreakers: true,
         showFindHelp: false,
         showLegend: false,
         showIdleEdges: false,
@@ -29,7 +28,8 @@ describe('GraphDataState', () => {
         showSecurity: false,
         showServiceNodes: true,
         showTrafficAnimation: false,
-        showVirtualServices: true
+        showVirtualServices: true,
+        trafficRates: DefaultTrafficRates
       },
       updateTime: 0
     });

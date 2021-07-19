@@ -1,4 +1,4 @@
-import { Layout, EdgeLabelMode, NodeType, NodeParamsType, GraphType } from '../../types/Graph';
+import { Layout, EdgeLabelMode, NodeType, NodeParamsType, GraphType, TrafficRate } from '../../types/Graph';
 import { DurationInSeconds, IntervalInMilliseconds } from '../../types/Common';
 import Namespace from '../../types/Namespace';
 import { URLParam } from '../../app/History';
@@ -7,7 +7,7 @@ import { isKioskMode } from '../../utils/SearchParamUtils';
 export type GraphUrlParams = {
   activeNamespaces: Namespace[];
   duration: DurationInSeconds;
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphLayout: Layout;
   graphType: GraphType;
   node?: NodeParamsType;
@@ -16,14 +16,16 @@ export type GraphUrlParams = {
   showIdleNodes: boolean;
   showOperationNodes: boolean;
   showServiceNodes: boolean;
+  trafficRates: TrafficRate[];
 };
 
 const buildCommonQueryParams = (params: GraphUrlParams): string => {
-  let q = `&${URLParam.GRAPH_EDGES}=${params.edgeLabelMode}`;
+  let q = `&${URLParam.GRAPH_EDGES}=${params.edgeLabels}`;
   q += `&${URLParam.GRAPH_LAYOUT}=${params.graphLayout.name}`;
   q += `&${URLParam.GRAPH_IDLE_EDGES}=${params.showIdleEdges}`;
   q += `&${URLParam.GRAPH_IDLE_NODES}=${params.showIdleNodes}`;
   q += `&${URLParam.GRAPH_SERVICE_NODES}=${params.showServiceNodes}`;
+  q += `&${URLParam.GRAPH_TRAFFIC}=${params.trafficRates}`;
   q += `&${URLParam.GRAPH_TYPE}=${params.graphType}`;
   q += `&${URLParam.DURATION}=${params.duration}`;
   q += `&${URLParam.OPERATION_NODES}=${params.showOperationNodes}`;

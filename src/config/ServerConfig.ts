@@ -58,16 +58,21 @@ const defaultServerConfig: ComputedServerConfig = {
   istioAnnotations: {
     istioInjectionAnnotation: 'sidecar.istio.io/inject'
   },
+  istioCanaryRevision: {
+    current: '',
+    upgrade: ''
+  },
   istioIdentityDomain: 'svc.cluster.local',
   istioNamespace: 'istio-system',
-  istioComponentNamespaces: new Map<string, string>(),
   istioLabels: {
     appLabelName: 'app',
     injectionLabelName: 'istio-injection',
+    injectionLabelRev: 'istio.io/rev',
     versionLabelName: 'version'
   },
   kialiFeatureFlags: {
-    istioInjectionAction: true
+    istioInjectionAction: true,
+    istioUpgradeAction: false
   },
   prometheus: {
     globalScrapeInterval: 15,
@@ -108,7 +113,5 @@ export const isIstioNamespace = (namespace: string): boolean => {
   if (namespace === serverConfig.istioNamespace) {
     return true;
   }
-  return serverConfig.istioComponentNamespaces
-    ? Object.values(serverConfig.istioComponentNamespaces).includes(namespace)
-    : false;
+  return false;
 };

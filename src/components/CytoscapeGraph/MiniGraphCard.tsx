@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { style } from 'typestyle';
 import {
   Card,
   CardActions,
@@ -13,17 +12,23 @@ import {
 } from '@patternfly/react-core';
 import history from '../../app/History';
 import GraphDataSource from '../../services/GraphDataSource';
-import { DecoratedGraphElements, EdgeLabelMode, GraphType, NodeType } from '../../types/Graph';
-import CytoscapeGraph, { GraphNodeDoubleTapEvent } from './CytoscapeGraph';
+import { DecoratedGraphElements, GraphType, NodeType } from '../../types/Graph';
+import CytoscapeGraph, { GraphEdgeTapEvent, GraphNodeTapEvent } from './CytoscapeGraph';
 import { CytoscapeGraphSelectorBuilder } from './CytoscapeGraphSelector';
 import { DagreGraph } from './graphs/DagreGraph';
 import { GraphUrlParams, makeNodeGraphUrlFromParams } from 'components/Nav/NavUtils';
 import { store } from 'store/ConfigStore';
+import { style } from 'typestyle';
+import { toRangeString } from '../Time/Utils';
+import { TimeInMilliseconds } from '../../types/Common';
 
-const miniGraphContainerStyle = style({ height: '300px' });
+const initGraphContainerStyle = style({ width: '100%', height: '100%' });
 
 type MiniGraphCardProps = {
   dataSource: GraphDataSource;
+  onEdgeTap?: (e: GraphEdgeTapEvent) => void;
+  mtlsEnabled: boolean;
+  graphContainerStyle?: string;
 };
 
 type MiniGraphCardState = {
@@ -32,8 +37,11 @@ type MiniGraphCardState = {
 };
 
 export default class MiniGraphCard extends React.Component<MiniGraphCardProps, MiniGraphCardState> {
+  private cytoscapeGraphRef: any;
+
   constructor(props) {
     super(props);
+    this.cytoscapeGraphRef = React.createRef();
     this.state = { isKebabOpen: false, graphData: props.dataSource.graphData };
   }
 
@@ -60,9 +68,13 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
         Show node graph
       </DropdownItem>
     ];
+    const rangeEnd: TimeInMilliseconds = this.props.dataSource.graphTimestamp * 1000;
+    const rangeStart: TimeInMilliseconds = rangeEnd - this.props.dataSource.graphDuration * 1000;
+    const intervalTitle =
+      rangeEnd > 0 ? toRangeString(rangeStart, rangeEnd, { second: '2-digit' }, { second: '2-digit' }) : 'Loading';
 
     return (
-      <Card style={{ height: '100%' }}>
+      <Card style={{ height: '100%' }} id={'MiniGraphCard'}>
         <CardHead>
           <CardActions>
             <Dropdown
@@ -74,18 +86,18 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
             />
           </CardActions>
           <CardHeader>
-            <Title style={{ float: 'left' }} headingLevel="h3" size="2xl">
-              Graph Overview
+            <Title style={{ float: 'left' }} headingLevel="h5" size="lg">
+              {intervalTitle}
             </Title>
           </CardHeader>
         </CardHead>
         <CardBody>
           <div style={{ height: '100%' }}>
             <CytoscapeGraph
-              boxByCluster={false}
-              boxByNamespace={false}
               compressOnHide={true}
-              containerClassName={miniGraphContainerStyle}
+              containerClassName={
+                this.props.graphContainerStyle ? this.props.graphContainerStyle : initGraphContainerStyle
+              }
               graphData={{
                 elements: this.state.graphData,
                 errorMessage: !!this.props.dataSource.errorMessage ? this.props.dataSource.errorMessage : undefined,
@@ -95,17 +107,18 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
                 timestamp: this.props.dataSource.graphTimestamp
               }}
               toggleIdleNodes={() => undefined}
-              edgeLabelMode={EdgeLabelMode.NONE}
-              isMTLSEnabled={false}
+              edgeLabels={this.props.dataSource.fetchParameters.edgeLabels}
+              isMTLSEnabled={this.props.mtlsEnabled}
               isMiniGraph={true}
+              onEdgeTap={this.props.onEdgeTap}
               layout={DagreGraph.getLayout()}
               onNodeTap={this.handleNodeTap}
+              ref={refInstance => this.setCytoscapeGraph(refInstance)}
               refreshInterval={0}
-              showCircuitBreakers={false}
               showIdleEdges={false}
               showMissingSidecars={true}
               showOperationNodes={false}
-              showSecurity={false}
+              showSecurity={true}
               showServiceNodes={true}
               showTrafficAnimation={false}
               showIdleNodes={false}
@@ -117,26 +130,38 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
     );
   }
 
-  private handleNodeTap = (e: GraphNodeDoubleTapEvent) => {
+  private setCytoscapeGraph(cytoscapeGraph: any) {
+    this.cytoscapeGraphRef.current = cytoscapeGraph;
+  }
+
+  private handleNodeTap = (e: GraphNodeTapEvent) => {
     // Do nothing on inaccessible nodes or service entry nodes
     if (e.isInaccessible || e.isServiceEntry) {
       return;
     }
 
-    // If we are already on the details page of the double-tapped node, do nothing.
+    // If we are already on the details page of the tapped node, do nothing.
     const displayedNode = this.props.dataSource.fetchParameters.node;
+    // Minigraph will consider box nodes as app
+    const eNodeType = e.nodeType === 'box' && e.isBox ? e.isBox : e.workload ? 'workload' : e.nodeType;
     const isSameResource =
       displayedNode?.namespace.name === e.namespace &&
-      displayedNode.nodeType === e.nodeType &&
-      displayedNode[displayedNode.nodeType] === e[e.nodeType];
+      displayedNode.nodeType === eNodeType &&
+      displayedNode[displayedNode.nodeType] === e[eNodeType];
 
     if (isSameResource) {
       return;
     }
 
-    // Redirect to the details page of the double-tapped node.
-    let resource = e[e.nodeType];
-    let resourceType: string = e.nodeType === NodeType.APP ? 'application' : e.nodeType;
+    // unselect the currently selected node
+    const cy = this.cytoscapeGraphRef.current.getCy();
+    if (cy) {
+      cy.$(':selected').selectify().unselect().unselectify();
+    }
+
+    // Redirect to the details page of the tapped node.
+    let resource = e[eNodeType];
+    let resourceType: string = eNodeType === NodeType.APP ? 'application' : eNodeType;
 
     history.push(`/namespaces/${e.namespace}/${resourceType}s/${resource}`);
   };
@@ -201,7 +226,7 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
     const urlParams: GraphUrlParams = {
       activeNamespaces: this.props.dataSource.fetchParameters.namespaces,
       duration: this.props.dataSource.fetchParameters.duration,
-      edgeLabelMode: this.props.dataSource.fetchParameters.edgeLabelMode,
+      edgeLabels: this.props.dataSource.fetchParameters.edgeLabels,
       graphLayout: store.getState().graph.layout,
       graphType: graphType,
       node: this.props.dataSource.fetchParameters.node!,
@@ -209,7 +234,8 @@ export default class MiniGraphCard extends React.Component<MiniGraphCardProps, M
       showIdleEdges: this.props.dataSource.fetchParameters.showIdleEdges,
       showIdleNodes: this.props.dataSource.fetchParameters.showIdleNodes,
       showOperationNodes: this.props.dataSource.fetchParameters.showOperationNodes,
-      showServiceNodes: true
+      showServiceNodes: true,
+      trafficRates: this.props.dataSource.fetchParameters.trafficRates
     };
 
     // To ensure updated components get the updated URL, update the URL first and then the state

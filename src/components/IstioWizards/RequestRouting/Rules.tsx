@@ -13,6 +13,8 @@ import {
 } from '@patternfly/react-core';
 import { WorkloadWeight } from '../TrafficShifting';
 import { Abort, Delay, HTTPRetry } from '../../../types/IstioObjects';
+import { PFBadge, PFBadges } from 'components/Pf/PfBadges';
+import { ROUTE_RULES_TOOLTIP, wizardTooltip } from '../WizardHelp';
 
 export enum MOVE_TYPE {
   UP,
@@ -137,9 +139,7 @@ class Rules extends React.Component<Props> {
                       .map((wk, i) => {
                         return (
                           <div key={'wk_' + order + '_' + wk.name + '_' + i}>
-                            <Tooltip position={TooltipPosition.top} content={<>Workload</>}>
-                              <Badge className={'virtualitem_badge_definition'}>WS</Badge>
-                            </Tooltip>
+                            <PFBadge badge={PFBadges.Workload} position={TooltipPosition.top} />
                             {wk.name} ({wk.weight}% routed traffic)
                           </div>
                         );
@@ -205,7 +205,7 @@ class Rules extends React.Component<Props> {
                   title: (
                     <EmptyState variant={EmptyStateVariant.full}>
                       <Title headingLevel="h5" size="lg">
-                        No Rules Defined
+                        No Route Rules defined
                       </Title>
                       <EmptyStateBody className={noRulesStyle}>
                         A Request Routing scenario needs at least a Route Rule
@@ -220,7 +220,8 @@ class Rules extends React.Component<Props> {
 
     return (
       <>
-        Rules defined:
+        Route Rules
+        {wizardTooltip(ROUTE_RULES_TOOLTIP)}
         <Table
           aria-label="Rules Created"
           cells={headerCells}

@@ -1,15 +1,20 @@
 import * as React from 'react';
-import { Tab, Tooltip, TooltipPosition, Badge } from '@patternfly/react-core';
+import { Tab } from '@patternfly/react-core';
 import { style } from 'typestyle';
 import { summaryFont, summaryHeader, summaryBodyTabs } from './SummaryPanelCommon';
 import { CyNode } from 'components/CytoscapeGraph/CytoscapeGraphUtils';
 import KialiPageLink from 'components/Link/KialiPageLink';
-import { RateTableGrpc, RateTableHttp } from 'components/SummaryPanel/RateTable';
+import { RateTableGrpc, RateTableHttp, RateTableTcp } from 'components/SummaryPanel/RateTable';
 import SimpleTabs from 'components/Tab/SimpleTabs';
 import { PFColors } from 'components/Pf/PfColors';
 import { KialiIcon } from 'config/KialiIcon';
-import { SummaryPanelPropType, NodeType } from 'types/Graph';
-import { getAccumulatedTrafficRateGrpc, getAccumulatedTrafficRateHttp } from 'utils/TrafficRate';
+import { SummaryPanelPropType, NodeType, TrafficRate } from 'types/Graph';
+import {
+  getAccumulatedTrafficRateGrpc,
+  getAccumulatedTrafficRateHttp,
+  getAccumulatedTrafficRateTcp
+} from 'utils/TrafficRate';
+import { PFBadge, PFBadges } from 'components/Pf/PfBadges';
 
 type SummaryPanelClusterBoxState = {
   clusterBox: any;
@@ -53,19 +58,23 @@ export default class SummaryPanelClusterBox extends React.Component<SummaryPanel
     const numWorkloads = boxed.filter(`node[nodeType = "${NodeType.WORKLOAD}"]`).size();
     const { numApps, numVersions } = this.countApps(boxed);
     const numEdges = boxed.connectedEdges().size();
-    // incoming edges are from a different cluster, or from a local root node
-    let incomingEdges = clusterBox.cy().nodes(`[${CyNode.cluster} != "${cluster}"]`).edgesTo(boxed);
-    incomingEdges = incomingEdges.add(boxed.filter(`[?${CyNode.isRoot}]`).edgesTo('*'));
-    // outgoing edges are to a different cluster
-    const outgoingEdges = boxed.edgesTo(`[${CyNode.cluster} != "${cluster}"]`);
-    // total edges are incoming + edges from boxed workload/app/root nodes (i.e. not injected service nodes or box nodes)
-    const totalEdges = incomingEdges.add(boxed.filter(`[?${CyNode.workload}]`).edgesTo('*'));
-    const totalRateGrpc = getAccumulatedTrafficRateGrpc(totalEdges);
-    const totalRateHttp = getAccumulatedTrafficRateHttp(totalEdges);
-    const incomingRateGrpc = getAccumulatedTrafficRateGrpc(incomingEdges);
-    const incomingRateHttp = getAccumulatedTrafficRateHttp(incomingEdges);
-    const outgoingRateGrpc = getAccumulatedTrafficRateGrpc(outgoingEdges);
-    const outgoingRateHttp = getAccumulatedTrafficRateHttp(outgoingEdges);
+    // inbound edges are from a different cluster
+    const inboundEdges = clusterBox.cy().nodes(`[${CyNode.cluster} != "${cluster}"]`).edgesTo(boxed);
+    // outbound edges are to a different cluster
+    const outboundEdges = boxed.edgesTo(`[${CyNode.cluster} != "${cluster}"]`);
+    // total edges are inbound + edges from boxed workload|app|root nodes (i.e. not injected service nodes or box nodes)
+    const totalEdges = inboundEdges.add(boxed.filter(`[?${CyNode.workload}]`).edgesTo('*'));
+    const grpcIn = getAccumulatedTrafficRateGrpc(inboundEdges);
+    const grpcOut = getAccumulatedTrafficRateGrpc(outboundEdges);
+    const grpcTotal = getAccumulatedTrafficRateGrpc(totalEdges);
+    const httpIn = getAccumulatedTrafficRateHttp(inboundEdges);
+    const httpOut = getAccumulatedTrafficRateHttp(outboundEdges);
+    const httpTotal = getAccumulatedTrafficRateHttp(totalEdges);
+    const isGrpcRequests = this.props.trafficRates.includes(TrafficRate.GRPC_REQUEST);
+    const tcpIn = getAccumulatedTrafficRateTcp(inboundEdges);
+    const tcpOut = getAccumulatedTrafficRateTcp(outboundEdges);
+    const tcpTotal = getAccumulatedTrafficRateTcp(totalEdges);
+
     return (
       <div className="panel panel-default" style={SummaryPanelClusterBox.panelStyle}>
         <div className="panel-heading" style={summaryHeader}>
@@ -74,62 +83,64 @@ export default class SummaryPanelClusterBox extends React.Component<SummaryPanel
         </div>
         <div className={summaryBodyTabs}>
           <SimpleTabs id="graph_summary_tabs" defaultTab={0} style={{ paddingBottom: '10px' }}>
-            <Tab style={summaryFont} title="Incoming" eventKey={0}>
+            <Tab style={summaryFont} title="Inbound" eventKey={0}>
               <div style={summaryFont}>
-                {incomingRateGrpc.rate === 0 && incomingRateHttp.rate === 0 && (
+                {grpcIn.rate === 0 && httpIn.rate === 0 && tcpIn.rate === 0 && (
                   <>
-                    <KialiIcon.Info /> No incoming traffic.
+                    <KialiIcon.Info /> No inbound traffic.
                   </>
                 )}
-                {incomingRateGrpc.rate > 0 && (
+                {grpcIn.rate > 0 && (
                   <RateTableGrpc
-                    title="GRPC Traffic (requests per second):"
-                    rate={incomingRateGrpc.rate}
-                    rateGrpcErr={incomingRateGrpc.rateGrpcErr}
-                    rateNR={incomingRateGrpc.rateNoResponse}
+                    isRequests={isGrpcRequests}
+                    rate={grpcIn.rate}
+                    rateGrpcErr={grpcIn.rateGrpcErr}
+                    rateNR={grpcIn.rateNoResponse}
                   />
                 )}
-                {incomingRateHttp.rate > 0 && (
+                {httpIn.rate > 0 && (
                   <RateTableHttp
                     title="HTTP (requests per second):"
-                    rate={incomingRateHttp.rate}
-                    rate3xx={incomingRateHttp.rate3xx}
-                    rate4xx={incomingRateHttp.rate4xx}
-                    rate5xx={incomingRateHttp.rate5xx}
-                    rateNR={incomingRateHttp.rateNoResponse}
+                    rate={httpIn.rate}
+                    rate3xx={httpIn.rate3xx}
+                    rate4xx={httpIn.rate4xx}
+                    rate5xx={httpIn.rate5xx}
+                    rateNR={httpIn.rateNoResponse}
                   />
                 )}
+                {tcpIn.rate > 0 && <RateTableTcp rate={tcpIn.rate} />}
                 {
                   // We don't show a sparkline here because we need to aggregate the traffic of an
                   // ad hoc set of [root] nodes. We don't have backend support for that aggregation.
                 }
               </div>
             </Tab>
-            <Tab style={summaryFont} title="Outgoing" eventKey={1}>
+            <Tab style={summaryFont} title="Outbound" eventKey={1}>
               <div style={summaryFont}>
-                {outgoingRateGrpc.rate === 0 && outgoingRateHttp.rate === 0 && (
+                {grpcOut.rate === 0 && httpOut.rate === 0 && tcpOut.rate === 0 && (
                   <>
-                    <KialiIcon.Info /> No outgoing traffic.
+                    <KialiIcon.Info /> No outbound traffic.
                   </>
                 )}
-                {outgoingRateGrpc.rate > 0 && (
+                {grpcOut.rate > 0 && (
                   <RateTableGrpc
-                    title="GRPC Traffic (requests per second):"
-                    rate={outgoingRateGrpc.rate}
-                    rateGrpcErr={outgoingRateGrpc.rateGrpcErr}
-                    rateNR={outgoingRateGrpc.rateNoResponse}
+                    isRequests={isGrpcRequests}
+                    rate={grpcOut.rate}
+                    rateGrpcErr={grpcOut.rateGrpcErr}
+                    rateNR={grpcOut.rateNoResponse}
                   />
                 )}
-                {outgoingRateHttp.rate > 0 && (
+                {httpOut.rate > 0 && (
                   <RateTableHttp
                     title="HTTP (requests per second):"
-                    rate={outgoingRateHttp.rate}
-                    rate3xx={outgoingRateHttp.rate3xx}
-                    rate4xx={outgoingRateHttp.rate4xx}
-                    rate5xx={outgoingRateHttp.rate5xx}
-                    rateNR={outgoingRateHttp.rateNoResponse}
+                    rate={httpOut.rate}
+                    rate3xx={httpOut.rate3xx}
+                    rate4xx={httpOut.rate4xx}
+                    rate5xx={httpOut.rate5xx}
+                    rateNR={httpOut.rateNoResponse}
                   />
                 )}
+                {tcpOut.rate > 0 && <RateTableTcp rate={tcpOut.rate} />}
                 {
                   // We don't show a sparkline here because we need to aggregate the traffic of an
                   // ad hoc set of [root] nodes. We don't have backend support for that aggregation.
@@ -138,29 +149,30 @@ export default class SummaryPanelClusterBox extends React.Component<SummaryPanel
             </Tab>
             <Tab style={summaryFont} title="Total" eventKey={2}>
               <div style={summaryFont}>
-                {totalRateGrpc.rate === 0 && totalRateHttp.rate === 0 && (
+                {grpcTotal.rate === 0 && httpTotal.rate === 0 && tcpTotal.rate === 0 && (
                   <>
                     <KialiIcon.Info /> No traffic.
                   </>
                 )}
-                {totalRateGrpc.rate > 0 && (
+                {grpcTotal.rate > 0 && (
                   <RateTableGrpc
-                    title="GRPC Traffic (requests per second):"
-                    rate={totalRateGrpc.rate}
-                    rateGrpcErr={totalRateGrpc.rateGrpcErr}
-                    rateNR={totalRateGrpc.rateNoResponse}
+                    isRequests={isGrpcRequests}
+                    rate={grpcTotal.rate}
+                    rateGrpcErr={grpcTotal.rateGrpcErr}
+                    rateNR={grpcTotal.rateNoResponse}
                   />
                 )}
-                {totalRateHttp.rate > 0 && (
+                {httpTotal.rate > 0 && (
                   <RateTableHttp
                     title="HTTP (requests per second):"
-                    rate={totalRateHttp.rate}
-                    rate3xx={totalRateHttp.rate3xx}
-                    rate4xx={totalRateHttp.rate4xx}
-                    rate5xx={totalRateHttp.rate5xx}
-                    rateNR={totalRateHttp.rateNoResponse}
+                    rate={httpTotal.rate}
+                    rate3xx={httpTotal.rate3xx}
+                    rate4xx={httpTotal.rate4xx}
+                    rate5xx={httpTotal.rate5xx}
+                    rateNR={httpTotal.rateNoResponse}
                   />
                 )}
+                {tcpTotal.rate > 0 && <RateTableTcp rate={tcpTotal.rate} />}
               </div>
             </Tab>
           </SimpleTabs>
@@ -192,12 +204,10 @@ export default class SummaryPanelClusterBox extends React.Component<SummaryPanel
     return (
       <React.Fragment key={cluster}>
         <span>
-          <Tooltip position={TooltipPosition.auto} content={<>Cluster</>}>
-            <Badge className="virtualitem_badge_definition" style={{ marginBottom: '2px' }}>
-              CL
-            </Badge>
-          </Tooltip>
-          <KialiPageLink href="/" cluster={cluster}>{cluster}</KialiPageLink>{' '}
+          <PFBadge badge={PFBadges.Cluster} style={{ marginBottom: '2px' }} />
+          <KialiPageLink href="/" cluster={cluster}>
+            {cluster}
+          </KialiPageLink>{' '}
         </span>
         <br />
       </React.Fragment>

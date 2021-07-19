@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { shallow } from 'enzyme';
 import { GraphFind } from '../GraphFind';
-import { EdgeLabelMode } from 'types/Graph';
 
 const testHandler = () => undefined;
 const testSetter = _val => undefined;
@@ -12,13 +11,13 @@ describe('Parse find value test', () => {
     const wrapper = shallow(
       <GraphFind
         cy={undefined}
-        edgeLabelMode={EdgeLabelMode.NONE}
+        edgeLabels={[]}
         findValue="testFind"
         hideValue="testHide"
         showFindHelp={false}
         showSecurity={false}
         showIdleNodes={false}
-        setEdgeLabelMode={testSetter}
+        setEdgeLabels={testSetter}
         setFindValue={testSetter}
         setHideValue={testSetter}
         toggleFindHelp={testHandler}
@@ -83,15 +82,35 @@ describe('Parse find value test', () => {
     // @ts-ignore
     expect(instance.parseValue('cb')).toEqual('node[?hasCB]');
     // @ts-ignore
-    expect(instance.parseValue('sidecar')).toEqual('node[^hasMissingSC]');
+    expect(instance.parseValue('faultinjection')).toEqual('node[?hasFaultInjection]');
     // @ts-ignore
-    expect(instance.parseValue('sc')).toEqual('node[^hasMissingSC]');
+    expect(instance.parseValue('fi')).toEqual('node[?hasFaultInjection]');
     // @ts-ignore
     expect(instance.parseValue('outside')).toEqual('node[?isOutside]');
     // @ts-ignore
     expect(instance.parseValue('outsider')).toEqual('node[?isOutside]');
     // @ts-ignore
+    expect(instance.parseValue('requestrouting')).toEqual('node[?hasRequestRouting]');
+    // @ts-ignore
+    expect(instance.parseValue('rr')).toEqual('node[?hasRequestRouting]');
+    // @ts-ignore
+    expect(instance.parseValue('requesttimeout')).toEqual('node[?hasRequestTimeout]');
+    // @ts-ignore
+    expect(instance.parseValue('rto')).toEqual('node[?hasRequestTimeout]');
+    // @ts-ignore
     expect(instance.parseValue('root')).toEqual('node[?isRoot]');
+    // @ts-ignore
+    expect(instance.parseValue('sidecar')).toEqual('node[^hasMissingSC]');
+    // @ts-ignore
+    expect(instance.parseValue('sc')).toEqual('node[^hasMissingSC]');
+    // @ts-ignore
+    expect(instance.parseValue('tcptrafficshifting')).toEqual('node[?hasTCPTrafficShifting]');
+    // @ts-ignore
+    expect(instance.parseValue('tcpts')).toEqual('node[?hasTCPTrafficShifting]');
+    // @ts-ignore
+    expect(instance.parseValue('trafficshifting')).toEqual('node[?hasTrafficShifting]');
+    // @ts-ignore
+    expect(instance.parseValue('ts')).toEqual('node[?hasTrafficShifting]');
     // @ts-ignore
     expect(instance.parseValue('trafficsource')).toEqual('node[?isRoot]');
     // @ts-ignore
@@ -100,6 +119,8 @@ describe('Parse find value test', () => {
     expect(instance.parseValue('vs')).toEqual('node[?hasVS]');
 
     // check coverage of edge operands
+    // @ts-ignore
+    expect(instance.parseValue('destprincipal contains spiffe')).toEqual('edge[destPrincipal *= "spiffe"]');
     // @ts-ignore
     expect(instance.parseValue('grpc > 5.0')).toEqual('edge[grpc > 5.0]');
     // @ts-ignore
@@ -117,11 +138,17 @@ describe('Parse find value test', () => {
     // @ts-ignore
     expect(instance.parseValue('%httptraffic > 50')).toEqual('edge[httpPercentReq > 50]');
     // @ts-ignore
+    expect(instance.parseValue('protocol = http')).toEqual('edge[protocol = "http"]');
+    // @ts-ignore
     expect(instance.parseValue('responseTime > 5.0')).toEqual('edge[responseTime > 5.0]');
     // @ts-ignore
     expect(instance.parseValue('rt > 5.0')).toEqual('edge[responseTime > 5.0]');
     // @ts-ignore
+    expect(instance.parseValue('sourceprincipal contains spiffe')).toEqual('edge[sourcePrincipal *= "spiffe"]');
+    // @ts-ignore
     expect(instance.parseValue('tcp > 5.0')).toEqual('edge[tcp > 5.0]');
+    // @ts-ignore
+    expect(instance.parseValue('throughput > 5.0')).toEqual('edge[throughput > 5.0]');
 
     // @ts-ignore
     expect(instance.parseValue('mtls')).toEqual('edge[isMTLS > 0]');

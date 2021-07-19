@@ -27,9 +27,9 @@ const namespaceFilter = (state: KialiAppState) => state.namespaces.filter;
 
 export const namespaceFilterSelector = createIdentitySelector(namespaceFilter);
 
-const edgeLabelMode = (state: KialiAppState) => state.graph.toolbarState.edgeLabelMode;
+const edgeLabels = (state: KialiAppState) => state.graph.toolbarState.edgeLabels;
 
-export const edgeLabelModeSelector = createIdentitySelector(edgeLabelMode);
+export const edgeLabelsSelector = createIdentitySelector(edgeLabels);
 
 const findValue = (state: KialiAppState) => state.graph.toolbarState.findValue;
 
@@ -70,6 +70,10 @@ export const lastRefreshAtSelector = createIdentitySelector(lastRefreshAt);
 const showIdleNodes = (state: KialiAppState) => state.graph.toolbarState.showIdleNodes;
 
 export const showIdleNodesSelector = createIdentitySelector(showIdleNodes);
+
+const trafficRates = (state: KialiAppState) => state.graph.toolbarState.trafficRates;
+
+export const trafficRatesSelector = createIdentitySelector(trafficRates);
 
 const meshwideMTLSStatus = (state: KialiAppState) => state.meshTLSStatus.status;
 

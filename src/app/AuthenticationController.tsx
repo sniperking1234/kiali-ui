@@ -19,6 +19,7 @@ import { TLSStatus } from '../types/TLSStatus';
 import { MeshTlsActions } from '../actions/MeshTlsActions';
 import { AuthStrategy } from '../types/Auth';
 import { JaegerInfo } from '../types/JaegerInfo';
+import { ServerConfig } from '../types/ServerConfig';
 import { LoginActions } from '../actions/LoginActions';
 import history from './History';
 import { NamespaceActions } from 'actions/NamespaceAction';
@@ -27,6 +28,8 @@ import { UserSettingsActions } from 'actions/UserSettingsActions';
 import { DurationInSeconds, IntervalInMilliseconds } from 'types/Common';
 import { config } from 'config';
 import { store } from 'store/ConfigStore';
+import { toGrpcRate, toHttpRate, toTcpRate, TrafficRate } from 'types/Graph';
+import { GraphToolbarActions } from 'actions/GraphToolbarActions';
 
 interface AuthenticationControllerReduxProps {
   authenticated: boolean;
@@ -41,6 +44,7 @@ interface AuthenticationControllerReduxProps {
   setNamespaces: (namespaces: Namespace[], receivedAt: Date) => void;
   setRefreshInterval: (interval: IntervalInMilliseconds) => void;
   setServerStatus: (serverStatus: ServerStatus) => void;
+  setTrafficRates: (rates: TrafficRate[]) => void;
 }
 
 type AuthenticationControllerProps = AuthenticationControllerReduxProps & {
@@ -183,6 +187,7 @@ class AuthenticationController extends React.Component<AuthenticationControllerP
       this.props.setNamespaces(configs[0].data, new Date());
       setServerConfig(configs[1].data);
       this.applyUIDefaults();
+      this.checkConfiguredRemoteKialis(configs[1].data);
 
       if (this.props.landingRoute) {
         history.replace(this.props.landingRoute);
@@ -254,6 +259,53 @@ class AuthenticationController extends React.Component<AuthenticationControllerP
           console.debug(`Setting UI Default: namespaces ${JSON.stringify(activeNamespaces.map(ns => ns.name))}`);
         }
       }
+
+      // Graph Traffic
+      const grpcRate = toGrpcRate(uiDefaults.graph.traffic.grpc);
+      const httpRate = toHttpRate(uiDefaults.graph.traffic.http);
+      const tcpRate = toTcpRate(uiDefaults.graph.traffic.tcp);
+      const rates: TrafficRate[] = [];
+      if (grpcRate) {
+        rates.push(TrafficRate.GRPC_GROUP, grpcRate);
+      }
+      if (httpRate) {
+        rates.push(TrafficRate.HTTP_GROUP, httpRate);
+      }
+      if (tcpRate) {
+        rates.push(TrafficRate.TCP_GROUP, tcpRate);
+      }
+      this.props.setTrafficRates(rates);
+    }
+  }
+
+  // Check which clusters does not have an accessible Kiali instance.
+  // Emit a warning telling that for those clusters, no cross-links will be available.
+  private checkConfiguredRemoteKialis(backendConfigs: ServerConfig) {
+    if (backendConfigs.clusters) {
+      const clustersWithoutKialis = [] as string[];
+      for (let cluster in backendConfigs.clusters) {
+        // skip home cluster, it's always reachable
+        if (cluster === backendConfigs.clusterInfo?.name) {
+          continue;
+        }
+        if (backendConfigs.clusters.hasOwnProperty(cluster)) {
+          const kialiInstance = backendConfigs.clusters[cluster].kialiInstances?.find(
+            instance => instance.url.length !== 0
+          );
+          if (!kialiInstance) {
+            clustersWithoutKialis.push(cluster);
+          }
+        }
+      }
+
+      if (clustersWithoutKialis.length > 0) {
+        AlertUtils.addWarning(
+          'Not all remote clusters have reachable Kiali instances.',
+          undefined,
+          undefined,
+          'Context menus are disabled for remote cluster nodes if a Kiali instance is not discovered, or if the remote Kiali is not configured with an external URL.'
+        );
+      }
     }
   }
 
@@ -289,7 +341,8 @@ const mapDispatchToProps = (dispatch: KialiDispatch) => ({
   setMeshTlsStatus: bindActionCreators(MeshTlsActions.setinfo, dispatch),
   setNamespaces: bindActionCreators(NamespaceActions.receiveList, dispatch),
   setRefreshInterval: bindActionCreators(UserSettingsActions.setRefreshInterval, dispatch),
-  setServerStatus: (serverStatus: ServerStatus) => processServerStatus(dispatch, serverStatus)
+  setServerStatus: (serverStatus: ServerStatus) => processServerStatus(dispatch, serverStatus),
+  setTrafficRates: bindActionCreators(GraphToolbarActions.setTrafficRates, dispatch)
 });
 
 const AuthenticationControllerContainer = connect(mapStateToProps, mapDispatchToProps)(AuthenticationController);

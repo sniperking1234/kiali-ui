@@ -6,7 +6,7 @@ import { appLabelFilter, versionLabelFilter } from '../../pages/WorkloadList/Fil
 
 import MissingSidecar from '../MissingSidecar/MissingSidecar';
 import { hasMissingSidecar, IstioTypes, Renderer, Resource, SortResource, TResource } from './Config';
-import { DisplayMode, HealthIndicator } from '../Health/HealthIndicator';
+import { HealthIndicator } from '../Health/HealthIndicator';
 import { ValidationObjectSummary } from '../Validations/ValidationObjectSummary';
 import { WorkloadListItem } from '../../types/Workload';
 import { IstioConfigItem } from '../../types/IstioConfigList';
@@ -22,11 +22,13 @@ import ValidationSummary from '../Validations/ValidationSummary';
 import OverviewCardContentExpanded from '../../pages/Overview/OverviewCardContentExpanded';
 import { OverviewToolbar } from '../../pages/Overview/OverviewToolbar';
 import { StatefulFilters } from '../Filters/StatefulFilters';
-import { GetIstioObjectUrl } from '../Link/IstioObjectLink';
+import IstioObjectLink, { GetIstioObjectUrl } from '../Link/IstioObjectLink';
 import { labelFilter } from 'components/Filters/CommonFilters';
 import { labelFilter as NsLabelFilter } from '../../pages/Overview/Filters';
 import ValidationSummaryLink from '../Link/ValidationSummaryLink';
 import { ValidationStatus } from '../../types/IstioObjects';
+import { PFBadgeType, PFBadge, PFBadges } from 'components/Pf/PfBadges';
+import MissingLabel from '../MissingLabel/MissingLabel';
 
 // Links
 
@@ -60,11 +62,12 @@ export const details: Renderer<AppListItem | WorkloadListItem | ServiceListItem>
   const hasMissingVersion = isWorkload && !item['versionLabel'];
   const additionalDetails = (item as WorkloadListItem | ServiceListItem).additionalDetailSample;
   const spacer = hasMissingSC && additionalDetails && additionalDetails.icon;
+
   return (
     <td
       role="gridcell"
       key={'VirtuaItem_Details_' + item.namespace + '_' + item.name}
-      style={{ verticalAlign: 'middle' }}
+      style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}
     >
       <ul>
         {hasMissingSC && (
@@ -72,28 +75,23 @@ export const details: Renderer<AppListItem | WorkloadListItem | ServiceListItem>
             <MissingSidecar namespace={item.namespace} />
           </li>
         )}
-        {isWorkload && hasMissingApp && (
-          <li>
-            Missing{' '}
-            <Badge isRead={true} className={'virtualitem_badge_definition'}>
-              app
-            </Badge>
-            label
-          </li>
-        )}
-        {isWorkload && hasMissingVersion && (
-          <li>
-            Missing{' '}
-            <Badge isRead={true} className={'virtualitem_badge_definition'}>
-              version
-            </Badge>
-            label
-          </li>
+        {isWorkload && (hasMissingApp || hasMissingVersion) && (
+          <MissingLabel missingApp={hasMissingApp} missingVersion={hasMissingVersion} tooltip={false} />
         )}
         {spacer && ' '}
         {additionalDetails && additionalDetails.icon && (
           <li>{renderAPILogo(additionalDetails.icon, additionalDetails.title, 0)}</li>
         )}
+        {item.istioReferences &&
+          item.istioReferences.length > 0 &&
+          item.istioReferences.map(ir => (
+            <li>
+              <PFBadge badge={PFBadges[ir.objectType]} position={TooltipPosition.top} />
+              <IstioObjectLink name={ir.name} namespace={item.namespace || ''} type={ir.objectType.toLowerCase()}>
+                {ir.name}
+              </IstioObjectLink>
+            </li>
+          ))}
       </ul>
     </td>
   );
@@ -155,26 +153,20 @@ export const status: Renderer<NamespaceInfo> = (ns: NamespaceInfo) => {
   return <td role="gridcell" key={'VirtuaItem_Status_' + ns.name} />;
 };
 
-export const nsItem: Renderer<NamespaceInfo> = (ns: NamespaceInfo, _config: Resource, icon: string) => {
+export const nsItem: Renderer<NamespaceInfo> = (ns: NamespaceInfo, _config: Resource, badge: PFBadgeType) => {
   return (
     <td role="gridcell" key={'VirtuaItem_NamespaceItem_' + ns.name} style={{ verticalAlign: 'middle' }}>
-      <Badge className={'virtualitem_badge_definition'}>{icon}</Badge>
+      <PFBadge badge={badge} />
       {ns.name}
     </td>
   );
 };
 
-export const item: Renderer<TResource> = (item: TResource, config: Resource, icon: string) => {
+export const item: Renderer<TResource> = (item: TResource, config: Resource, badge: PFBadgeType) => {
   const key = 'link_definition_' + config.name + '_' + item.namespace + '_' + item.name;
-  let itemName = config.name.charAt(0).toUpperCase() + config.name.slice(1);
-  if (config.name === 'istio') {
-    itemName = IstioTypes[item['type']].name;
-  }
   return (
     <td role="gridcell" key={'VirtuaItem_Item_' + item.namespace + '_' + item.name} style={{ verticalAlign: 'middle' }}>
-      <Tooltip position={TooltipPosition.top} content={<>{itemName}</>}>
-        <Badge className={'virtualitem_badge_definition'}>{icon}</Badge>
-      </Tooltip>
+      <PFBadge badge={badge} position={TooltipPosition.top} />
       <Link key={key} to={getLink(item, config)} className={'virtualitem_definition_link'}>
         {item.name}
       </Link>
@@ -189,9 +181,7 @@ export const namespace: Renderer<TResource> = (item: TResource) => {
       key={'VirtuaItem_Namespace_' + item.namespace + '_' + item.name}
       style={{ verticalAlign: 'middle' }}
     >
-      <Tooltip position={TooltipPosition.top} content={<>Namespace</>}>
-        <Badge className={'virtualitem_badge_definition'}>NS</Badge>
-      </Tooltip>
+      <PFBadge badge={PFBadges.Namespace} position={TooltipPosition.top} />
       {item.namespace}
     </td>
   );
@@ -220,7 +210,7 @@ const labelActivate = (filters: ActiveFilter[], key: string, value: string, id: 
 export const labels: Renderer<SortResource | NamespaceInfo> = (
   item: SortResource | NamespaceInfo,
   _: Resource,
-  __: string,
+  __: PFBadgeType,
   ___?: Health,
   statefulFilter?: React.RefObject<StatefulFilters>
 ) => {
@@ -246,8 +236,9 @@ export const labels: Renderer<SortResource | NamespaceInfo> = (
               key={`labelbadge_${key}_${value}_${item.name}`}
               isRead={true}
               style={{
-                backgroundColor: labelAct ? PFColors.Blue200 : undefined,
-                cursor: isExactlyLabelFilter || !labelAct ? 'pointer' : 'not-allowed'
+                backgroundColor: labelAct ? PFColors.Badge : undefined,
+                cursor: isExactlyLabelFilter || !labelAct ? 'pointer' : 'not-allowed',
+                whiteSpace: 'nowrap'
               }}
               onClick={() =>
                 statefulFilter
@@ -285,14 +276,14 @@ export const labels: Renderer<SortResource | NamespaceInfo> = (
     </td>
   );
 };
-export const health: Renderer<TResource> = (item: TResource, __: Resource, _: string, health?: Health) => {
+export const health: Renderer<TResource> = (item: TResource, __: Resource, _: PFBadgeType, health?: Health) => {
   return (
     <td
       role="gridcell"
       key={'VirtuaItem_Health_' + item.namespace + '_' + item.name}
       style={{ verticalAlign: 'middle' }}
     >
-      {health && <HealthIndicator id={item.name} health={health} mode={DisplayMode.SMALL} />}
+      {health && <HealthIndicator id={item.name} health={health} />}
     </td>
   );
 };

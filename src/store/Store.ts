@@ -9,7 +9,15 @@ import {
   TimeRange,
   UserName
 } from '../types/Common';
-import { EdgeLabelMode, GraphDefinition, GraphType, Layout, NodeParamsType, SummaryData } from '../types/Graph';
+import {
+  EdgeLabelMode,
+  GraphDefinition,
+  GraphType,
+  Layout,
+  NodeParamsType,
+  SummaryData,
+  TrafficRate
+} from '../types/Graph';
 import { TLSStatus } from '../types/TLSStatus';
 import { StatusState } from '../types/StatusState';
 import { TourInfo } from 'components/Tour/TourStop';
@@ -36,8 +44,9 @@ export interface NamespaceState {
 // Various pages are described here with their various sections
 export interface GraphToolbarState {
   // dropdown props
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
+  trafficRates: TrafficRate[];
   // find props
   findValue: string;
   hideValue: string;
@@ -46,7 +55,6 @@ export interface GraphToolbarState {
   boxByCluster: boolean;
   boxByNamespace: boolean;
   compressOnHide: boolean;
-  showCircuitBreakers: boolean;
   showIdleEdges: boolean;
   showIdleNodes: boolean;
   showLegend: boolean;

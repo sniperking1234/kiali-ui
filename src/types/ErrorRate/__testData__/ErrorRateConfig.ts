@@ -69,7 +69,8 @@ export const generateRequestHealth = (
 export const serverRateConfig = {
   clusters: {},
   kialiFeatureFlags: {
-    istioInjectionAction: true
+    istioInjectionAction: true,
+    istioUpgradeAction: false
   },
   healthConfig: {
     rate: [
@@ -114,12 +115,16 @@ export const serverRateConfig = {
   istioAnnotations: {
     istioInjectionAnnotation: ''
   },
+  istioCanaryRevision: {
+    current: '',
+    upgrade: ''
+  },
   istioIdentityDomain: 'svc.cluster.local',
   istioNamespace: 'istio-system',
-  istioComponentNamespaces: new Map<string, string>(),
   istioLabels: {
     appLabelName: 'app',
     injectionLabelName: 'istio-injection',
+    injectionLabelRev: 'istio.io/rev',
     versionLabelName: 'version'
   },
   prometheus: {

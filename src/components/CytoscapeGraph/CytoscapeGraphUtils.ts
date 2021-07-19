@@ -23,7 +23,8 @@ export const CyEdge = {
   responses: 'responses',
   responseTime: 'responseTime',
   sourcePrincipal: 'sourcePrincipal',
-  tcp: 'tcp'
+  tcp: 'tcp',
+  throughput: 'throughput'
 };
 
 export const CyEdgeResponses = {
@@ -42,7 +43,12 @@ export const CyNode = {
   grpcInNoResponse: 'grpcInNoResponse',
   grpcOut: 'grpcOut',
   hasCB: 'hasCB',
+  hasFaultInjection: 'hasFaultInjection',
   hasMissingSC: 'hasMissingSC',
+  hasRequestRouting: 'hasRequestRouting',
+  hasRequestTimeout: 'hasRequestTimeout',
+  hasTCPTrafficShifting: 'hasTCPTrafficShifting',
+  hasTrafficShifting: 'hasTrafficShifting',
   hasVS: 'hasVS',
   health: 'health',
   healthStatus: 'healthStatus',

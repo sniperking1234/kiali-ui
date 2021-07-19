@@ -106,14 +106,14 @@ describe('Metrics for a service', () => {
   });
 
   it('mounts and loads empty metrics', done => {
-    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [] };
+    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [], rows: 2 };
     new MounterMocker()
       .addMock('getServiceDashboard', dashboard)
       .mountWithStore(
         <IstioMetrics namespace="ns" object="svc" objectType={MetricsObjectTypes.SERVICE} direction={'inbound'} />
       )
       .run(done, wrapper => {
-        expect(wrapper.find('GridItem')).toHaveLength(1);
+        expect(wrapper.find('Chart')).toHaveLength(0);
       });
   });
 
@@ -127,7 +127,8 @@ describe('Metrics for a service', () => {
         createHistogramChart('m5'),
         createHistogramChart('m7')
       ],
-      externalLinks: []
+      externalLinks: [],
+      rows: 2
     };
     new MounterMocker()
       .addMock('getServiceDashboard', dashboard)
@@ -135,7 +136,7 @@ describe('Metrics for a service', () => {
         <IstioMetrics namespace="ns" object="svc" objectType={MetricsObjectTypes.SERVICE} direction={'inbound'} />
       )
       .run(done, wrapper => {
-        expect(wrapper.find('GridItem')).toHaveLength(5);
+        expect(wrapper.find('Chart')).toHaveLength(4);
       });
   }, 10000); // Increase timeout for this test
 });
@@ -161,14 +162,14 @@ describe('Inbound Metrics for a workload', () => {
   });
 
   it('mounts and loads empty metrics', done => {
-    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [] };
+    const dashboard: DashboardModel = { title: 'foo', aggregations: [], charts: [], externalLinks: [], rows: 2 };
     new MounterMocker()
       .addMock('getWorkloadDashboard', dashboard)
       .mountWithStore(
         <IstioMetrics namespace="ns" object="wkd" objectType={MetricsObjectTypes.WORKLOAD} direction={'inbound'} />
       )
       .run(done, wrapper => {
-        expect(wrapper.find('GridItem')).toHaveLength(1);
+        expect(wrapper.find('Chart')).toHaveLength(0);
       });
   });
 
@@ -182,7 +183,8 @@ describe('Inbound Metrics for a workload', () => {
         createHistogramChart('m5'),
         createHistogramChart('m7')
       ],
-      externalLinks: []
+      externalLinks: [],
+      rows: 2
     };
     new MounterMocker()
       .addMock('getWorkloadDashboard', dashboard)
@@ -190,7 +192,7 @@ describe('Inbound Metrics for a workload', () => {
         <IstioMetrics namespace="ns" object="wkd" objectType={MetricsObjectTypes.WORKLOAD} direction={'inbound'} />
       )
       .run(done, wrapper => {
-        expect(wrapper.find('GridItem')).toHaveLength(5);
+        expect(wrapper.find('Chart')).toHaveLength(4);
       });
   }, 10000); // Increase timeout for this test
 });

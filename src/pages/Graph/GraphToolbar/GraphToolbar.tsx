@@ -1,20 +1,20 @@
 import * as React from 'react';
 import { Button, ButtonVariant, Toolbar, ToolbarGroup, Tooltip, TooltipPosition } from '@patternfly/react-core';
 import { style } from 'typestyle';
-import * as _ from 'lodash';
 import { connect } from 'react-redux';
 import { ThunkDispatch } from 'redux-thunk';
 import { bindActionCreators } from 'redux';
 import { KialiAppState } from '../../../store/Store';
 import {
   activeNamespacesSelector,
-  edgeLabelModeSelector,
+  edgeLabelsSelector,
   graphTypeSelector,
   showIdleNodesSelector,
-  replayActiveSelector
+  replayActiveSelector,
+  trafficRatesSelector
 } from '../../../store/Selectors';
 import { GraphToolbarActions } from '../../../actions/GraphToolbarActions';
-import { GraphType, NodeParamsType, EdgeLabelMode, SummaryData } from '../../../types/Graph';
+import { GraphType, NodeParamsType, EdgeLabelMode, SummaryData, TrafficRate } from '../../../types/Graph';
 import GraphFindContainer from './GraphFind';
 import GraphSettingsContainer from './GraphSettings';
 import history, { HistoryManager, URLParam } from '../../../app/History';
@@ -32,18 +32,20 @@ import { CyNode } from 'components/CytoscapeGraph/CytoscapeGraphUtils';
 
 type ReduxProps = {
   activeNamespaces: Namespace[];
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
   node?: NodeParamsType;
   replayActive: boolean;
   showIdleNodes: boolean;
   summaryData: SummaryData | null;
+  trafficRates: TrafficRate[];
 
   setActiveNamespaces: (activeNamespaces: Namespace[]) => void;
-  setEdgeLabelMode: (edgeLabelMode: EdgeLabelMode) => void;
+  setEdgeLabels: (edgeLabels: EdgeLabelMode[]) => void;
   setGraphType: (graphType: GraphType) => void;
   setIdleNodes: (idleNodes: boolean) => void;
   setNode: (node?: NodeParamsType) => void;
+  setTrafficRates: (rates: TrafficRate[]) => void;
   toggleReplayActive: () => void;
 };
 
@@ -64,15 +66,6 @@ const rightToolbarStyle = style({
 });
 
 export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
-  /**
-   *  Key-value pair object representation of EdgeLabelMode
-   *
-   *  Example:  EdgeLabelMode =>{'TRAFFIC_RATE_PER_SECOND': 'TrafficRatePerSecond'}
-   */
-  static readonly EDGE_LABEL_MODES = _.mapValues(_.omitBy(EdgeLabelMode, _.isFunction), val =>
-    _.capitalize(_.startCase(val as EdgeLabelMode))
-  );
-
   static contextTypes = {
     router: () => null
   };
@@ -81,13 +74,24 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
     super(props);
     // Let URL override current redux state at construction time. Update URL with unset params.
     const urlParams = new URLSearchParams(history.location.search);
-    const urlEdgeLabelMode = HistoryManager.getParam(URLParam.GRAPH_EDGES, urlParams) as EdgeLabelMode;
-    if (urlEdgeLabelMode) {
-      if (urlEdgeLabelMode !== props.edgeLabelMode) {
-        props.setEdgeLabelMode(urlEdgeLabelMode);
+    const urlEdgeLabels = HistoryManager.getParam(URLParam.GRAPH_EDGES, urlParams);
+    if (urlEdgeLabels) {
+      if (urlEdgeLabels !== props.edgeLabels.join(',')) {
+        props.setEdgeLabels(urlEdgeLabels.split(',') as EdgeLabelMode[]);
       }
     } else {
-      HistoryManager.setParam(URLParam.GRAPH_EDGES, String(this.props.edgeLabelMode));
+      const edgeLabelsString = props.edgeLabels.join(',');
+      HistoryManager.setParam(URLParam.GRAPH_EDGES, edgeLabelsString);
+    }
+
+    const urlGraphTraffic = HistoryManager.getParam(URLParam.GRAPH_TRAFFIC, urlParams);
+    if (urlGraphTraffic) {
+      if (urlGraphTraffic !== props.trafficRates.join(',')) {
+        props.setTrafficRates(urlGraphTraffic.split(',') as TrafficRate[]);
+      }
+    } else {
+      const trafficRatesString = props.trafficRates.join(',');
+      HistoryManager.setParam(URLParam.GRAPH_TRAFFIC, trafficRatesString);
     }
 
     const urlGraphType = HistoryManager.getParam(URLParam.GRAPH_TYPE, urlParams) as GraphType;
@@ -127,9 +131,10 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
     } else {
       HistoryManager.setParam(URLParam.NAMESPACES, activeNamespacesString);
     }
-    HistoryManager.setParam(URLParam.GRAPH_EDGES, String(this.props.edgeLabelMode));
-    HistoryManager.setParam(URLParam.GRAPH_TYPE, String(this.props.graphType));
+    HistoryManager.setParam(URLParam.GRAPH_EDGES, String(this.props.edgeLabels));
     HistoryManager.setParam(URLParam.GRAPH_IDLE_NODES, String(this.props.showIdleNodes));
+    HistoryManager.setParam(URLParam.GRAPH_TRAFFIC, String(this.props.trafficRates));
+    HistoryManager.setParam(URLParam.GRAPH_TYPE, String(this.props.graphType));
   }
 
   componentWillUnmount() {
@@ -151,7 +156,9 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
       (this.props.summaryData.summaryType !== 'node' && this.props.summaryData.summaryType !== 'box')
     ) {
       history.push(`/graph/namespaces`);
+      return;
     }
+
     const selector = `node[id = "${this.props.summaryData!.summaryTarget.data(CyNode.id)}"]`;
     this.props.setNode(undefined);
     history.push(`/graph/namespaces?focusSelector=${encodeURI(selector)}`);
@@ -204,21 +211,23 @@ export class GraphToolbar extends React.PureComponent<GraphToolbarProps> {
 
 const mapStateToProps = (state: KialiAppState) => ({
   activeNamespaces: activeNamespacesSelector(state),
-  edgeLabelMode: edgeLabelModeSelector(state),
+  edgeLabels: edgeLabelsSelector(state),
   graphType: graphTypeSelector(state),
   node: state.graph.node,
   replayActive: replayActiveSelector(state),
   showIdleNodes: showIdleNodesSelector(state),
-  summaryData: state.graph.summaryData
+  summaryData: state.graph.summaryData,
+  trafficRates: trafficRatesSelector(state)
 });
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<KialiAppState, void, KialiAppAction>) => {
   return {
     setActiveNamespaces: bindActionCreators(NamespaceActions.setActiveNamespaces, dispatch),
-    setEdgeLabelMode: bindActionCreators(GraphToolbarActions.setEdgelLabelMode, dispatch),
+    setEdgeLabels: bindActionCreators(GraphToolbarActions.setEdgeLabels, dispatch),
     setGraphType: bindActionCreators(GraphToolbarActions.setGraphType, dispatch),
     setIdleNodes: bindActionCreators(GraphToolbarActions.setIdleNodes, dispatch),
     setNode: bindActionCreators(GraphActions.setNode, dispatch),
+    setTrafficRates: bindActionCreators(GraphToolbarActions.setTrafficRates, dispatch),
     toggleReplayActive: bindActionCreators(UserSettingsActions.toggleReplayActive, dispatch)
   };
 };

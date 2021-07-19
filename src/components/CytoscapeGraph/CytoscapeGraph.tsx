@@ -7,6 +7,8 @@ import ReactResizeDetector from 'react-resize-detector';
 import { GraphData } from 'pages/Graph/GraphPage';
 import { IntervalInMilliseconds, TimeInMilliseconds } from '../../types/Common';
 import {
+  BoxByType,
+  CLUSTER_DEFAULT,
   CytoscapeBaseEvent,
   CytoscapeClickEvent,
   CytoscapeGlobalScratchData,
@@ -32,16 +34,16 @@ import EmptyGraphLayout from './EmptyGraphLayout';
 import FocusAnimation from './FocusAnimation';
 import { GraphHighlighter } from './graphs/GraphHighlighter';
 import TrafficRenderer from './TrafficAnimation/TrafficRenderer';
+import { serverConfig } from 'config';
+import { decoratedNodeData } from './CytoscapeGraphUtils';
 
 type CytoscapeGraphProps = {
-  boxByCluster: boolean;
-  boxByNamespace: boolean;
   compressOnHide: boolean;
   containerClassName?: string;
   contextMenuEdgeComponent?: EdgeContextMenuType;
   contextMenuGroupComponent?: NodeContextMenuType;
   contextMenuNodeComponent?: NodeContextMenuType;
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphData: GraphData;
   focusSelector?: string;
   isMiniGraph: boolean;
@@ -49,6 +51,7 @@ type CytoscapeGraphProps = {
   layout: Layout;
   onEmptyGraphAction?: () => void;
   onNodeDoubleTap?: (e: GraphNodeDoubleTapEvent) => void;
+  onEdgeTap?: (e: GraphEdgeTapEvent) => void;
   onNodeTap?: (e: GraphNodeTapEvent) => void;
   onReady?: (cytoscapeRef: any) => void;
   refreshInterval: IntervalInMilliseconds;
@@ -56,7 +59,6 @@ type CytoscapeGraphProps = {
   setNode?: (node?: NodeParamsType) => void;
   setTraceId?: (traceId?: string) => void;
   setUpdateTime?: (val: TimeInMilliseconds) => void;
-  showCircuitBreakers: boolean;
   showIdleEdges: boolean;
   showIdleNodes: boolean;
   showMissingSidecars: boolean;
@@ -69,6 +71,13 @@ type CytoscapeGraphProps = {
   trace?: JaegerTrace;
   updateSummary?: (event: CytoscapeClickEvent) => void;
 };
+
+export interface GraphEdgeTapEvent {
+  namespace: string;
+  type: string;
+  source: string;
+  target: string;
+}
 
 export interface GraphNodeTapEvent {
   aggregate?: string;
@@ -139,12 +148,11 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
     // affect display. Options that trigger a graph refresh will have an update when the refresh
     // completes (showIdleNodes, showSecurity, showServiceNodes, etc).
     let result =
-      this.props.edgeLabelMode !== nextProps.edgeLabelMode ||
+      this.props.edgeLabels !== nextProps.edgeLabels ||
       this.props.graphData.isLoading !== nextProps.graphData.isLoading ||
       this.props.graphData.elements !== nextProps.graphData.elements ||
       this.props.layout !== nextProps.layout ||
       this.props.compressOnHide !== nextProps.compressOnHide ||
-      this.props.showCircuitBreakers !== nextProps.showCircuitBreakers ||
       this.props.showMissingSidecars !== nextProps.showMissingSidecars ||
       this.props.showTrafficAnimation !== nextProps.showTrafficAnimation ||
       this.props.showVirtualServices !== nextProps.showVirtualServices ||
@@ -179,7 +187,7 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
       // pre-select node if provided
       const node = this.props.graphData.fetchParams.node;
       if (node && cy && cy.$(':selected').length === 0) {
-        let selector = "[nodeType = '" + node.nodeType + "']";
+        let selector = `[namespace = "${node.namespace.name}"][nodeType = "${node.nodeType}"]`;
         switch (node.nodeType) {
           case NodeType.AGGREGATE:
             selector =
@@ -201,7 +209,18 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
 
         const eles = cy.nodes(selector);
         if (eles.length > 0) {
-          this.selectTargetAndUpdateSummary(eles[0]);
+          let target = eles[0];
+          // default app to the whole app box, when appropriate
+          if (
+            (node.nodeType === NodeType.APP || node.nodeType === NodeType.BOX) &&
+            !node.version &&
+            target.isChild() &&
+            target.parent()[0].data(CyNode.isBox) === BoxByType.APP
+          ) {
+            target = target.parent()[0];
+          }
+
+          this.selectTargetAndUpdateSummary(target);
         }
       }
 
@@ -244,11 +263,21 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
     return this.cytoscapeReactWrapperRef.current ? this.cytoscapeReactWrapperRef.current.getCy() : null;
   }
 
-  static buildTapEventArgs(event: CytoscapeClickEvent): GraphNodeTapEvent {
+  static buildTapEventArgs(event: CytoscapeClickEvent): GraphNodeTapEvent | GraphEdgeTapEvent {
     const target = event.summaryTarget;
     const targetType = event.summaryType;
     const targetOrBoxChildren = targetType === 'box' ? target.descendants() : target;
 
+    if (targetType === 'edge') {
+      const nodeSource = decoratedNodeData(target.source());
+      const nodeTarget = decoratedNodeData(target.target());
+      return {
+        namespace: nodeSource.namespace,
+        type: nodeSource.nodeType,
+        source: nodeSource[nodeSource.nodeType],
+        target: nodeTarget[nodeTarget.nodeType]
+      };
+    }
     // Invoke callback
     return {
       aggregate: target.data(CyNode.aggregate),
@@ -603,11 +632,10 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
 
     const globalScratchData: CytoscapeGlobalScratchData = {
       activeNamespaces: this.props.graphData.fetchParams.namespaces,
-      boxByCluster: this.props.boxByCluster,
-      boxByNamespace: this.props.boxByNamespace,
-      edgeLabelMode: this.props.edgeLabelMode,
+      edgeLabels: this.props.edgeLabels,
+      homeCluster: serverConfig?.clusterInfo?.name || CLUSTER_DEFAULT,
       graphType: this.props.graphData.fetchParams.graphType,
-      showCircuitBreakers: this.props.showCircuitBreakers,
+      trafficRates: this.props.graphData.fetchParams.trafficRates,
       showMissingSidecars: this.props.showMissingSidecars,
       showSecurity: this.props.showSecurity,
       showVirtualServices: this.props.showVirtualServices
@@ -691,7 +719,7 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
 
   private handleDoubleTap = (event: CytoscapeClickEvent) => {
     if (this.props.onNodeDoubleTap && CytoscapeGraph.isCyNodeClickEvent(event)) {
-      this.props.onNodeDoubleTap(CytoscapeGraph.buildTapEventArgs(event));
+      this.props.onNodeDoubleTap(CytoscapeGraph.buildTapEventArgs(event) as GraphNodeTapEvent);
     }
   };
 
@@ -701,11 +729,13 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
     }
 
     if (this.props.onNodeTap && CytoscapeGraph.isCyNodeClickEvent(event)) {
-      this.props.onNodeTap(CytoscapeGraph.buildTapEventArgs(event));
+      this.props.onNodeTap(CytoscapeGraph.buildTapEventArgs(event) as GraphNodeTapEvent);
     }
 
     if (!this.props.isMiniGraph) {
       this.graphHighlighter!.onClick(event);
+    } else if (this.props.onEdgeTap && CytoscapeGraph.isCyEdgeClickEvent(event)) {
+      this.props.onEdgeTap(CytoscapeGraph.buildTapEventArgs(event) as GraphEdgeTapEvent);
     }
   };
 
@@ -740,6 +770,11 @@ export default class CytoscapeGraph extends React.Component<CytoscapeGraphProps>
     }
 
     return true;
+  }
+
+  static isCyEdgeClickEvent(event: CytoscapeClickEvent): boolean {
+    const targetType = event.summaryType;
+    return targetType === 'edge';
   }
 
   // To know if we should re-layout, we need to know if any element changed

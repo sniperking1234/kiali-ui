@@ -16,7 +16,8 @@ export const GraphTourStops: { [name: string]: TourStopInfo } = {
   },
   Find: {
     name: 'Find and Hide',
-    description: 'Highlight or Hide graph elements via typed expressions. Click the Find/Hide help icon for details.',
+    description:
+      'Highlight or Hide graph elements via typed expressions. Click the dropdown for preset Find or Hide expressions. Click the Find/Hide help icon for details on the expression language.',
     position: PopoverPosition.bottom
   },
   Graph: {
@@ -25,6 +26,12 @@ export const GraphTourStops: { [name: string]: TourStopInfo } = {
       "Click on a node or edge to see its summary and emphasize its end-to-end paths. Double-click a node to see a graph focused on that node.\nDouble-click an 'external namespace' node to navigate directly to the namespace in the node's text label. Shift-Drag to quickly zoom in.",
     position: PopoverPosition.left,
     offset: '0, 250'
+  },
+  GraphTraffic: {
+    name: 'Graph Traffic',
+    description:
+      'Choose the traffic rates used to generate the graph. Each supported protocol offers one or more options. Unused protocols can be omitted.',
+    position: PopoverPosition.bottom
   },
   GraphType: {
     name: 'Graph Type',
@@ -64,6 +71,7 @@ const GraphTour: TourInfo = {
   name: 'GraphTour',
   stops: [
     GraphTourStops.Namespaces,
+    GraphTourStops.GraphTraffic,
     GraphTourStops.GraphType,
     GraphTourStops.Display,
     GraphTourStops.Find,

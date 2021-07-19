@@ -8,7 +8,10 @@ import {
   CytoscapeGlobalScratchNamespace,
   CytoscapeGlobalScratchData,
   UNKNOWN,
-  BoxByType
+  BoxByType,
+  Protocol,
+  numLabels,
+  TrafficRate
 } from '../../../types/Graph';
 import { icons } from '../../../config';
 import NodeImageTopology from '../../../assets/img/node-background-topology.png';
@@ -17,6 +20,7 @@ import { decoratedEdgeData, decoratedNodeData, CyNode } from '../CytoscapeGraphU
 import _ from 'lodash';
 import * as Cy from 'cytoscape';
 import { getEdgeHealth } from '../../../types/ErrorRate';
+import { PFBadges } from 'components/Pf/PfBadges';
 export const DimClass = 'mousedim';
 export const HighlightClass = 'mousehighlight';
 export const HoveredClass = 'mousehover';
@@ -51,9 +55,13 @@ let NodeColorFillHoverDegraded: PFColorVal;
 let NodeColorFillHoverFailure: PFColorVal;
 const NodeHeight = '25px';
 const NodeIconCB = icons.istio.circuitBreaker.className; // bolt
+const NodeIconFaultInjection = icons.istio.faultInjection.className; // ban
 const NodeIconMS = icons.istio.missingSidecar.className; // exclamation
 const NodeIconRoot = icons.istio.root.className; // alt-arrow-circle-right
 const NodeIconVS = icons.istio.virtualService.className; // code-branch
+const NodeIconRequestRouting = icons.istio.requestRouting.className; // code-branch
+const NodeIconRequestTimeout = icons.istio.requestTimeout.className; // clock
+const NodeIconTrafficShifting = icons.istio.trafficShifting.className; // share-alt
 const NodeTextColor = PFColors.Black1000;
 const NodeTextColorBox = PFColors.White;
 const NodeTextBackgroundColor = PFColors.White;
@@ -68,11 +76,11 @@ const NodeTextFontSizeHover = '11px';
 const NodeTextFontSizeHoverBox = '13px';
 const NodeWidth = NodeHeight;
 
-const badgeMargin = style({
-  marginLeft: '1px'
-});
+// Puts a little more space between icons when a badge has multiple icons
+const iconMargin = (existingIcons: string) =>
+  existingIcons === '' ? style({ marginLeft: '1px' }) : style({ marginRight: '2px' });
 
-const badgesDefault = style({
+const iconsDefault = style({
   alignItems: 'center',
   backgroundColor: NodeBadgeBackgroundColor,
   borderTopLeftRadius: '3px',
@@ -170,41 +178,76 @@ export class GraphStyles {
     return { wheelSensitivity: 0.1, autounselectify: false, autoungrabify: true };
   }
 
-  static htmlLabelForNode(ele: Cy.NodeSingular) {
+  static getNodeLabel(ele: Cy.NodeSingular) {
     const getCyGlobalData = (ele: Cy.NodeSingular): CytoscapeGlobalScratchData => {
       return ele.cy().scratch(CytoscapeGlobalScratchNamespace);
     };
 
     const cyGlobal = getCyGlobalData(ele);
-    const data = decoratedNodeData(ele);
-    const app = data.app || '';
-    const isBox = data.isBox;
-    const isBoxed = data.parent;
-    const isBoxedBy = isBoxed ? ele.parent()[0].data().isBox : undefined;
+    const node = decoratedNodeData(ele);
+    const app = node.app || '';
+    const cluster = node.cluster;
+    const namespace = node.namespace;
+    const nodeType = node.nodeType;
+    const service = node.service || '';
+    const version = node.version || '';
+    const workload = node.workload || '';
+    const isBox = node.isBox;
+    const isBoxed = node.parent;
+    const box1 = isBoxed ? ele.parent()[0] : undefined;
+    const box1Type = box1 ? box1.data().isBox : undefined;
+    const box2 = box1 && box1.parent() ? box1.parent()[0] : undefined;
+    const box2Type = box2 ? box2.data().isBox : undefined;
+    // const box3 = box2 && box2.parent() ? box2.parent()[0] : undefined;
+    // const box3Type = box3 ? box3.data().isBox : undefined;
+    const isAppBoxed = box1Type === BoxByType.APP;
+    const isNamespaceBoxed = box1Type === BoxByType.NAMESPACE || box2Type === BoxByType.NAMESPACE;
+    // const isClusterBoxed = box1Type === BoxByType.CLUSTER || box2Type === BoxByType.CLUSTER || box3Type === BoxByType.CLUSTER;
     const isMultiNamespace = cyGlobal.activeNamespaces.length > 1;
-    const isOutside = data.isOutside;
-    const namespace = data.namespace;
-    const nodeType = data.nodeType;
-    const service = data.service || '';
-    const version = data.version || '';
-    const workload = data.workload || '';
+    const isOutside = node.isOutside;
 
-    let badges = '';
-    if (data.isRoot) {
-      badges = `<span class="${NodeIconRoot} ${badgeMargin}"></span> ${badges}`;
+    let icons = '';
+    if (cyGlobal.showMissingSidecars && node.hasMissingSC) {
+      icons = `<span class="${NodeIconMS} ${iconMargin(icons)}"></span> ${icons}`;
     }
-    if (cyGlobal.showMissingSidecars && data.hasMissingSC) {
-      badges = `<span class="${NodeIconMS} ${badgeMargin}"></span> ${badges}`;
+    if (cyGlobal.showVirtualServices) {
+      if (node.hasCB) {
+        icons = `<span class="${NodeIconCB} ${iconMargin(icons)}"></span> ${icons}`;
+      }
+      // If there's an additional traffic scenario present then it's assumed
+      // that there is a VS present so the VS badge is omitted.
+      if (node.hasVS) {
+        const hasKialiScenario =
+          node.hasFaultInjection ||
+          node.hasRequestRouting ||
+          node.hasRequestTimeout ||
+          node.hasTCPTrafficShifting ||
+          node.hasTrafficShifting;
+        if (!hasKialiScenario) {
+          icons = `<span class="${NodeIconVS} ${iconMargin(icons)}"></span> ${icons}`;
+        } else {
+          if (node.hasRequestRouting) {
+            icons = `<span class="${NodeIconRequestRouting} ${iconMargin(icons)}"></span> ${icons}`;
+          }
+          if (node.hasFaultInjection) {
+            icons = `<span class="${NodeIconFaultInjection} ${iconMargin(icons)}"></span> ${icons}`;
+          }
+          if (node.hasTrafficShifting || node.hasTCPTrafficShifting) {
+            icons = `<span class="${NodeIconTrafficShifting} ${iconMargin(icons)}"></span> ${icons}`;
+          }
+          if (node.hasRequestTimeout) {
+            icons = `<span class="${NodeIconRequestTimeout} ${iconMargin(icons)}"></span> ${icons}`;
+          }
+        }
+      }
     }
-    if (cyGlobal.showCircuitBreakers && data.hasCB) {
-      badges = `<span class="${NodeIconCB} ${badgeMargin}"></span> ${badges}`;
+    if (node.isRoot) {
+      icons = `<span class="${NodeIconRoot} ${iconMargin(icons)}"></span> ${icons}`;
     }
-    if (cyGlobal.showVirtualServices && data.hasVS) {
-      badges = `<span class="${NodeIconVS} ${badgeMargin}"></span> ${badges}`;
-    }
-    const hasBadge = badges.length > 0;
-    if (hasBadge) {
-      badges = `<div class=${badgesDefault}>${badges}</div>`;
+
+    const hasIcon = icons.length > 0;
+    if (hasIcon) {
+      icons = `<div class=${iconsDefault}>${icons}</div>`;
     }
 
     let labelStyle = '';
@@ -222,23 +265,36 @@ export class GraphStyles {
     }
 
     const content: string[] = [];
+
+    // append namespace if necessary
     if (
       (isMultiNamespace || isOutside) &&
-      !cyGlobal.boxByNamespace &&
+      !!namespace &&
       namespace !== UNKNOWN &&
-      nodeType !== NodeType.UNKNOWN &&
-      isBox !== BoxByType.CLUSTER &&
+      !isAppBoxed &&
+      !isNamespaceBoxed &&
       isBox !== BoxByType.NAMESPACE
     ) {
       content.push(`(${namespace})`);
     }
 
+    // append cluster if necessary
+    if (
+      !!cluster &&
+      cluster !== UNKNOWN &&
+      cluster !== cyGlobal.homeCluster &&
+      !isBoxed &&
+      isBox !== BoxByType.CLUSTER
+    ) {
+      content.push(`(${cluster})`);
+    }
+
     switch (nodeType) {
       case NodeType.AGGREGATE:
-        content.unshift(data.aggregateValue!);
+        content.unshift(node.aggregateValue!);
         break;
       case NodeType.APP:
-        if (isBoxed && isBoxedBy === BoxByType.APP) {
+        if (isAppBoxed) {
           if (cyGlobal.graphType === GraphType.APP) {
             content.unshift(app);
           } else if (version && version !== UNKNOWN) {
@@ -261,13 +317,10 @@ export class GraphStyles {
             content.unshift(app);
             break;
           case BoxByType.CLUSTER:
-            content.unshift(data.cluster);
+            content.unshift(node.cluster);
             break;
           case BoxByType.NAMESPACE:
-            content.unshift(data.namespace);
-            if (!cyGlobal.boxByCluster && data.cluster !== UNKNOWN) {
-              content.push(`(${data.cluster})`);
-            }
+            content.unshift(node.namespace);
             break;
         }
         break;
@@ -285,31 +338,31 @@ export class GraphStyles {
     }
 
     const contentText = content.join('<br/>');
-    const contentClasses = hasBadge ? `${contentDefault} ${contentWithBadges}` : `${contentDefault}`;
+    const contentClasses = hasIcon ? `${contentDefault} ${contentWithBadges}` : `${contentDefault}`;
     let appBoxStyle = '';
     if (isBox) {
-      let letter = '';
+      let badge = '';
       switch (isBox) {
         case BoxByType.APP:
-          letter = 'A';
+          badge = PFBadges.App.badge;
           appBoxStyle += `font-size: ${NodeTextFontSize};`;
           break;
         case BoxByType.CLUSTER:
-          letter = 'CL';
+          badge = PFBadges.Cluster.badge;
           break;
         case BoxByType.NAMESPACE:
-          letter = 'NS';
+          badge = PFBadges.Namespace.badge;
           break;
         default:
           console.warn(`GraphSyles: Unexpected box [${isBox}] `);
       }
-      const contentBadge = `<span class="pf-c-badge pf-m-unread ${contentBoxPfBadge}" style="${appBoxStyle}">${letter}</span>`;
+      const contentBadge = `<span class="pf-c-badge pf-m-unread ${contentBoxPfBadge}" style="${appBoxStyle}">${badge}</span>`;
       const contentSpan = `<span class="${contentClasses} ${contentBox}" style=" ${appBoxStyle}${contentStyle}">${contentBadge}${contentText}</span>`;
-      return `<div class="${labelDefault} ${labelBox}" style="${labelStyle}">${badges}${contentSpan}</div>`;
+      return `<div class="${labelDefault} ${labelBox}" style="${labelStyle}">${icons}${contentSpan}</div>`;
     }
 
     const contentSpan = `<div class="${contentClasses}" style="${contentStyle}">${contentText}</div>`;
-    return `<div class="${labelDefault}" style="${labelStyle}">${badges}${contentSpan}</div>`;
+    return `<div class="${labelDefault}" style="${labelStyle}">${icons}${contentSpan}</div>`;
   }
 
   static htmlNodeLabels(cy: Cy.Core) {
@@ -320,7 +373,7 @@ export class GraphStyles {
         valign: 'bottom',
         halignBox: 'center',
         valignBox: 'bottom',
-        tpl: (data: any) => this.htmlLabelForNode(cy.$id(data.id))
+        tpl: (data: any) => this.getNodeLabel(cy.$id(data.id))
       }
     ];
   }
@@ -334,12 +387,16 @@ export class GraphStyles {
 
     const getEdgeColor = (ele: Cy.EdgeSingular): string => {
       const edgeData = decoratedEdgeData(ele);
+      const cyGlobal = getCyGlobalData(ele);
 
       if (!edgeData.hasTraffic) {
         return EdgeColorDead;
       }
       if (edgeData.protocol === 'tcp') {
         return EdgeColorTCPWithTraffic;
+      }
+      if (edgeData.protocol === 'grpc' && !cyGlobal.trafficRates.includes(TrafficRate.GRPC_REQUEST)) {
+        return EdgeColor;
       }
 
       const sourceNodeData = decoratedNodeData(ele.source());
@@ -356,77 +413,96 @@ export class GraphStyles {
       }
     };
 
-    const getEdgeLabel = (ele: Cy.EdgeSingular, includeProtocol?: boolean): string => {
+    const getEdgeLabel = (ele: Cy.EdgeSingular, isVerbose?: boolean): string => {
       const cyGlobal = getCyGlobalData(ele);
-      const edgeLabelMode = cyGlobal.edgeLabelMode;
-      let content = '';
+      const edgeLabels = cyGlobal.edgeLabels;
       const edgeData = decoratedEdgeData(ele);
+      const includeUnits = isVerbose || numLabels(edgeLabels) > 1;
+      let labels = [] as string[];
 
-      switch (edgeLabelMode) {
-        case EdgeLabelMode.REQUEST_RATE: {
-          let rate = 0;
-          let pErr = 0;
-          if (edgeData.http > 0) {
-            rate = edgeData.http;
-            pErr = edgeData.httpPercentErr > 0 ? edgeData.httpPercentErr : 0;
-          } else if (edgeData.grpc > 0) {
-            rate = edgeData.grpc;
-            pErr = edgeData.grpcPercentErr > 0 ? edgeData.grpcPercentErr : 0;
-          } else if (edgeData.tcp > 0) {
-            rate = edgeData.tcp;
-          }
+      if (edgeLabels.includes(EdgeLabelMode.TRAFFIC_RATE)) {
+        let rate = 0;
+        let pErr = 0;
+        if (edgeData.http > 0) {
+          rate = edgeData.http;
+          pErr = edgeData.httpPercentErr > 0 ? edgeData.httpPercentErr : 0;
+        } else if (edgeData.grpc > 0) {
+          rate = edgeData.grpc;
+          pErr = edgeData.grpcPercentErr > 0 ? edgeData.grpcPercentErr : 0;
+        } else if (edgeData.tcp > 0) {
+          rate = edgeData.tcp;
+        }
 
-          if (rate > 0) {
-            if (pErr > 0) {
-              let sErr = pErr.toFixed(1);
-              sErr = `${sErr.endsWith('.0') ? pErr.toFixed(0) : sErr}`;
-              content = `${rate.toFixed(2)}\n${sErr}%`;
-            } else {
-              content = rate.toFixed(2);
+        if (rate > 0) {
+          if (pErr > 0) {
+            labels.push(`${toFixedRequestRate(rate, includeUnits)}\n${toFixedErrRate(pErr)}`);
+          } else {
+            switch (edgeData.protocol) {
+              case Protocol.GRPC:
+                if (cyGlobal.trafficRates.includes(TrafficRate.GRPC_REQUEST)) {
+                  labels.push(toFixedRequestRate(rate, includeUnits));
+                } else {
+                  labels.push(toFixedRequestRate(rate, includeUnits, 'mps'));
+                }
+                break;
+              case Protocol.TCP:
+                labels.push(toFixedByteRate(rate, includeUnits));
+                break;
+              default:
+                labels.push(toFixedRequestRate(rate, includeUnits));
+                break;
             }
           }
-          break;
         }
-        case EdgeLabelMode.RESPONSE_TIME_95TH_PERCENTILE: {
-          // todo: remove this logging once we figure out the strangeness going on with responseTime
-          let logResponseTime = edgeData.responseTime;
-          if (!isNaN(logResponseTime) && !Number.isInteger(logResponseTime)) {
-            console.log(`Unexpected string responseTime=|${logResponseTime}|`);
-          }
-          // hack to fix responseTime is sometimes a string during runtime even though its type is number
-          const responseTimeNumber = parseInt(String(edgeData.responseTime));
-          const responseTime = responseTimeNumber > 0 ? responseTimeNumber : 0;
-          if (responseTime && responseTime > 0) {
-            content = responseTime < 1000.0 ? `${responseTime.toFixed(0)}ms` : `${(responseTime / 1000.0).toFixed(2)}s`;
-          }
-          break;
-        }
-        case EdgeLabelMode.REQUEST_DISTRIBUTION: {
-          let pReq;
-          if (edgeData.httpPercentReq > 0) {
-            pReq = edgeData.httpPercentReq;
-          } else if (edgeData.grpcPercentReq > 0) {
-            pReq = edgeData.grpcPercentReq;
-          }
-          if (pReq > 0) {
-            const sReq = pReq.toFixed(1);
-            content = `${sReq.endsWith('.0') ? pReq.toFixed(0) : sReq}%`;
-          }
-          break;
-        }
-        default:
-          content = '';
       }
 
-      if (includeProtocol) {
+      if (edgeLabels.includes(EdgeLabelMode.RESPONSE_TIME_GROUP)) {
+        // todo: remove this logging once we figure out the strangeness going on with responseTime
+        let logResponseTime = edgeData.responseTime;
+        if (!isNaN(logResponseTime) && !Number.isInteger(logResponseTime)) {
+          console.log(`Unexpected string responseTime=|${logResponseTime}|`);
+        }
+        // hack to fix responseTime is sometimes a string during runtime even though its type is number
+        const responseTimeNumber = parseInt(String(edgeData.responseTime));
+        const responseTime = responseTimeNumber > 0 ? responseTimeNumber : 0;
+        if (responseTime && responseTime > 0) {
+          labels.push(toFixedDuration(responseTime));
+        }
+      }
+
+      if (edgeLabels.includes(EdgeLabelMode.THROUGHPUT_GROUP)) {
+        let rate = edgeData.throughput;
+
+        if (rate > 0) {
+          labels.push(toFixedByteRate(rate, includeUnits));
+        }
+      }
+
+      if (edgeLabels.includes(EdgeLabelMode.TRAFFIC_DISTRIBUTION)) {
+        let pReq;
+        if (edgeData.httpPercentReq > 0) {
+          pReq = edgeData.httpPercentReq;
+        } else if (edgeData.grpcPercentReq > 0) {
+          pReq = edgeData.grpcPercentReq;
+        }
+        if (pReq > 0 && pReq < 100) {
+          labels.push(toFixedPercent(pReq));
+        }
+      }
+
+      let label = labels.join('\n');
+
+      if (isVerbose) {
         const protocol = edgeData.protocol;
-        content = protocol ? `${protocol} ${content}` : content;
+        label = protocol ? `${protocol}\n${label}` : label;
       }
 
       const mtlsPercentage = edgeData.isMTLS;
+      let lockIcon = false;
       if (cyGlobal.showSecurity && edgeData.hasTraffic) {
         if (mtlsPercentage && mtlsPercentage > 0) {
-          content = `${EdgeIconMTLS} ${content}`;
+          lockIcon = true;
+          label = `${EdgeIconMTLS}\n${label}`;
         }
       }
 
@@ -439,14 +515,53 @@ export class GraphStyles {
             // seen this code returned and not "UO". "UO" is returned only when the circuit breaker is caught open.
             // But if open CB is responsible for removing possible destinations the "UH" code seems preferred.
             if (responses[code]['UO'] || responses[code]['UH']) {
-              content = `${NodeIconCB} ${content}`;
+              label = lockIcon ? `${NodeIconCB} ${label}` : `${NodeIconCB}\n${label}`;
               break;
             }
           }
         }
       }
 
-      return content;
+      return label;
+    };
+
+    const trimFixed = (fixed: string): string => {
+      if (!fixed.includes('.')) {
+        return fixed;
+      }
+      while (fixed.endsWith('0')) {
+        fixed = fixed.slice(0, -1);
+      }
+      return fixed.endsWith('.') ? (fixed = fixed.slice(0, -1)) : fixed;
+    };
+
+    const toFixedRequestRate = (num: number, includeUnits: boolean, units?: string): string => {
+      const rate = trimFixed(num.toFixed(2));
+      return includeUnits ? `${rate} ${units || 'rps'}` : rate;
+    };
+
+    const toFixedErrRate = (num: number): string => {
+      return `${trimFixed(num.toFixed(num < 1 ? 1 : 0))}% err`;
+    };
+
+    const toFixedByteRate = (num: number, includeUnits: boolean): string => {
+      if (num < 1024.0) {
+        const rate = num < 1.0 ? trimFixed(num.toFixed(2)) : num.toFixed(0);
+        return includeUnits ? `${rate} bps` : rate;
+      }
+      const rate = trimFixed((num / 1024.0).toFixed(2));
+      return includeUnits ? `${rate} kps` : rate;
+    };
+
+    const toFixedPercent = (num: number): string => {
+      return `${trimFixed(num.toFixed(1))}%`;
+    };
+
+    const toFixedDuration = (num: number): string => {
+      if (num < 1000) {
+        return `${num.toFixed(0)}ms`;
+      }
+      return `${trimFixed((num / 1000.0).toFixed(2))}s`;
     };
 
     const getNodeBackgroundImage = (ele: Cy.NodeSingular): string => {

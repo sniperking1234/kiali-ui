@@ -9,7 +9,9 @@ import {
   NodeParamsType,
   NodeType,
   UNKNOWN,
-  DecoratedGraphNodeWrapper
+  DecoratedGraphNodeWrapper,
+  TrafficRate,
+  DefaultTrafficRates
 } from '../types/Graph';
 import Namespace from '../types/Namespace';
 import * as AlertUtils from '../utils/AlertUtils';
@@ -64,7 +66,7 @@ export interface FetchParams {
   boxByCluster?: boolean;
   boxByNamespace?: boolean;
   duration: DurationInSeconds;
-  edgeLabelMode: EdgeLabelMode;
+  edgeLabels: EdgeLabelMode[];
   graphType: GraphType;
   includeHealth: boolean;
   injectServiceNodes: boolean;
@@ -75,6 +77,7 @@ export interface FetchParams {
   showIdleNodes: boolean;
   showOperationNodes: boolean;
   showSecurity: boolean;
+  trafficRates: TrafficRate[];
 }
 
 type OnEvents = {
@@ -122,7 +125,7 @@ export default class GraphDataSource {
     this._errorMessage = null;
     this._fetchParams = {
       duration: 0,
-      edgeLabelMode: EdgeLabelMode.NONE,
+      edgeLabels: [],
       graphType: GraphType.VERSIONED_APP,
       includeHealth: true,
       injectServiceNodes: true,
@@ -130,7 +133,8 @@ export default class GraphDataSource {
       showIdleEdges: false,
       showIdleNodes: false,
       showOperationNodes: false,
-      showSecurity: false
+      showSecurity: false,
+      trafficRates: []
     };
     this._isError = this._isLoading = false;
   }
@@ -192,18 +196,74 @@ export default class GraphDataSource {
       appenders += ',securityPolicy';
     }
 
-    switch (fetchParams.edgeLabelMode) {
-      case EdgeLabelMode.RESPONSE_TIME_95TH_PERCENTILE:
-        appenders += ',responseTime';
-        break;
-
-      case EdgeLabelMode.REQUEST_RATE:
-      case EdgeLabelMode.REQUEST_DISTRIBUTION:
-      case EdgeLabelMode.NONE:
-      default:
-        break;
-    }
+    fetchParams.edgeLabels.forEach(edgeLabel => {
+      switch (edgeLabel) {
+        case EdgeLabelMode.RESPONSE_TIME_AVERAGE:
+          appenders += ',responseTime';
+          restParams.responseTime = 'avg';
+          break;
+        case EdgeLabelMode.RESPONSE_TIME_P50:
+          appenders += ',responseTime';
+          restParams.responseTime = '50';
+          break;
+        case EdgeLabelMode.RESPONSE_TIME_P95:
+          appenders += ',responseTime';
+          restParams.responseTime = '95';
+          break;
+        case EdgeLabelMode.RESPONSE_TIME_P99:
+          appenders += ',responseTime';
+          restParams.responseTime = '99';
+          break;
+        case EdgeLabelMode.THROUGHPUT_REQUEST:
+          appenders += ',throughput';
+          restParams.throughputType = 'request';
+          break;
+        case EdgeLabelMode.THROUGHPUT_RESPONSE:
+          appenders += ',throughput';
+          restParams.throughputType = 'response';
+          break;
+        case EdgeLabelMode.TRAFFIC_DISTRIBUTION:
+        case EdgeLabelMode.TRAFFIC_RATE:
+        default:
+          break;
+      }
+    });
     restParams.appenders = appenders;
+
+    restParams.rateGrpc = 'none';
+    restParams.rateHttp = 'none';
+    restParams.rateTcp = 'none';
+
+    fetchParams.trafficRates.forEach(trafficRate => {
+      switch (trafficRate) {
+        case TrafficRate.GRPC_RECEIVED:
+          restParams.rateGrpc = 'received';
+          break;
+        case TrafficRate.GRPC_REQUEST:
+          restParams.rateGrpc = 'requests';
+          break;
+        case TrafficRate.GRPC_SENT:
+          restParams.rateGrpc = 'sent';
+          break;
+        case TrafficRate.GRPC_TOTAL:
+          restParams.rateGrpc = 'total';
+          break;
+        case TrafficRate.HTTP_REQUEST:
+          restParams.rateHttp = 'requests';
+          break;
+        case TrafficRate.TCP_RECEIVED:
+          restParams.rateTcp = 'received';
+          break;
+        case TrafficRate.TCP_SENT:
+          restParams.rateTcp = 'sent';
+          break;
+        case TrafficRate.TCP_TOTAL:
+          restParams.rateTcp = 'total';
+          break;
+        default:
+          break;
+      }
+    });
 
     this._isLoading = true;
     this._isError = false;
@@ -245,6 +305,7 @@ export default class GraphDataSource {
 
   public fetchForApp = (duration: DurationInSeconds, namespace: string, app: string) => {
     const params = this.fetchForAppParams(duration, namespace, app);
+    params.showSecurity = true;
     this.fetchGraphData(params);
   };
 
@@ -256,13 +317,44 @@ export default class GraphDataSource {
     return params;
   };
 
+  public fetchForVersionedApp = (duration: DurationInSeconds, namespace: string, app: string) => {
+    const params = this.fetchForVersionedAppParams(duration, namespace, app);
+    params.showSecurity = true;
+    this.fetchGraphData(params);
+  };
+
+  public fetchForVersionedAppParams = (duration: DurationInSeconds, namespace: string, app: string): FetchParams => {
+    const params = GraphDataSource.defaultFetchParams(duration, namespace);
+    params.edgeLabels = [
+      EdgeLabelMode.RESPONSE_TIME_GROUP,
+      EdgeLabelMode.RESPONSE_TIME_P95,
+      EdgeLabelMode.THROUGHPUT_GROUP,
+      EdgeLabelMode.THROUGHPUT_REQUEST,
+      EdgeLabelMode.TRAFFIC_DISTRIBUTION,
+      EdgeLabelMode.TRAFFIC_RATE
+    ];
+    params.graphType = GraphType.VERSIONED_APP;
+    params.node!.nodeType = NodeType.APP;
+    params.node!.app = app;
+    return params;
+  };
+
   public fetchForWorkload = (duration: DurationInSeconds, namespace: string, workload: string) => {
     const params = this.fetchForWorkloadParams(duration, namespace, workload);
+    params.showSecurity = true;
     this.fetchGraphData(params);
   };
 
   public fetchForWorkloadParams = (duration: DurationInSeconds, namespace: string, workload: string): FetchParams => {
     const params = GraphDataSource.defaultFetchParams(duration, namespace);
+    params.edgeLabels = [
+      EdgeLabelMode.RESPONSE_TIME_GROUP,
+      EdgeLabelMode.RESPONSE_TIME_P95,
+      EdgeLabelMode.THROUGHPUT_GROUP,
+      EdgeLabelMode.THROUGHPUT_REQUEST,
+      EdgeLabelMode.TRAFFIC_DISTRIBUTION,
+      EdgeLabelMode.TRAFFIC_RATE
+    ];
     params.graphType = GraphType.WORKLOAD;
     params.node!.nodeType = NodeType.WORKLOAD;
     params.node!.workload = workload;
@@ -271,11 +363,20 @@ export default class GraphDataSource {
 
   public fetchForService = (duration: DurationInSeconds, namespace: string, service: string) => {
     const params = this.fetchForServiceParams(duration, namespace, service);
+    params.showSecurity = true;
     this.fetchGraphData(params);
   };
 
   public fetchForServiceParams = (duration: DurationInSeconds, namespace: string, service: string): FetchParams => {
     const params = GraphDataSource.defaultFetchParams(duration, namespace);
+    params.edgeLabels = [
+      EdgeLabelMode.RESPONSE_TIME_GROUP,
+      EdgeLabelMode.RESPONSE_TIME_P95,
+      EdgeLabelMode.THROUGHPUT_GROUP,
+      EdgeLabelMode.THROUGHPUT_REQUEST,
+      EdgeLabelMode.TRAFFIC_DISTRIBUTION,
+      EdgeLabelMode.TRAFFIC_RATE
+    ];
     params.graphType = GraphType.WORKLOAD;
     params.node!.nodeType = NodeType.SERVICE;
     params.node!.service = service;
@@ -302,7 +403,7 @@ export default class GraphDataSource {
       boxByCluster: false,
       boxByNamespace: false,
       duration: duration,
-      edgeLabelMode: EdgeLabelMode.NONE,
+      edgeLabels: [],
       graphType: GraphType.WORKLOAD,
       includeHealth: true,
       injectServiceNodes: true,
@@ -318,7 +419,8 @@ export default class GraphDataSource {
       showIdleEdges: false,
       showIdleNodes: false,
       showOperationNodes: false,
-      showSecurity: false
+      showSecurity: false,
+      trafficRates: DefaultTrafficRates
     };
   }
 
@@ -406,7 +508,8 @@ export default class GraphDataSource {
       return;
     }
 
-    const duration = this.fetchParameters.duration;
+    const duration = this.graphDuration;
+    const queryTime = this.graphTimestamp;
     const appNamespacePromises = new Map<string, Promise<NamespaceAppHealth>>();
     const serviceNamespacePromises = new Map<string, Promise<NamespaceServiceHealth>>();
     const workloadNamespacePromises = new Map<string, Promise<NamespaceWorkloadHealth>>();
@@ -431,7 +534,7 @@ export default class GraphDataSource {
         let promise = workloadNamespacePromises.get(namespace);
         const nodeHealth = { node: node, key: node.data.workload! };
         if (!promise) {
-          promise = API.getNamespaceWorkloadHealth(namespace, duration);
+          promise = API.getNamespaceWorkloadHealth(namespace, duration, queryTime);
           workloadNamespacePromises.set(namespace, promise);
           promiseToNode.set(promise, [nodeHealth]);
         } else {
@@ -444,7 +547,7 @@ export default class GraphDataSource {
             let promise = appNamespacePromises.get(namespace);
             const nodeHealth = { node: node, key: node.data.app! };
             if (!promise) {
-              promise = API.getNamespaceAppHealth(namespace, duration);
+              promise = API.getNamespaceAppHealth(namespace, duration, queryTime);
               appNamespacePromises.set(namespace, promise);
               promiseToNode.set(promise, [nodeHealth]);
             } else {
@@ -458,7 +561,7 @@ export default class GraphDataSource {
               let promise = appNamespacePromises.get(namespace);
               const nodeHealth = { node: node, key: node.data.app! };
               if (!promise) {
-                promise = API.getNamespaceAppHealth(namespace, duration);
+                promise = API.getNamespaceAppHealth(namespace, duration, queryTime);
                 appNamespacePromises.set(namespace, promise);
                 promiseToNode.set(promise, [nodeHealth]);
               } else {
@@ -472,7 +575,7 @@ export default class GraphDataSource {
             let promise = serviceNamespacePromises.get(namespace);
             const nodeHealth = { node: node, key: node.data.service! };
             if (!promise) {
-              promise = API.getNamespaceServiceHealth(namespace, duration);
+              promise = API.getNamespaceServiceHealth(namespace, duration, queryTime);
               serviceNamespacePromises.set(namespace, promise);
               promiseToNode.set(promise, [nodeHealth]);
             } else {

@@ -30,7 +30,7 @@ import {
   TLSRoute,
   VirtualService,
   VirtualServices,
-  WorkloadEntrySelector
+  WorkloadMatchSelector
 } from '../../types/IstioObjects';
 import { serverConfig } from '../../config';
 import { GatewaySelectorState } from './GatewaySelector';
@@ -1319,7 +1319,7 @@ export const buildRequestAuthentication = (
   };
 
   if (state.workloadSelector.length > 0) {
-    const workloadSelector: WorkloadEntrySelector = {
+    const workloadSelector: WorkloadMatchSelector = {
       matchLabels: {}
     };
     state.workloadSelector.split(',').forEach(label => {
@@ -1387,9 +1387,15 @@ export const buildSidecar = (name: string, namespace: string, state: SidecarStat
   return sc;
 };
 
-export const buildNamespaceInjectionPatch = (enable: boolean, remove: boolean): string => {
+export const buildNamespaceInjectionPatch = (enable: boolean, remove: boolean, revision: string | null): string => {
   const labels = {};
-  labels[serverConfig.istioLabels.injectionLabelName] = remove ? null : enable ? 'enabled' : 'disabled';
+  if (revision) {
+    labels[serverConfig.istioLabels.injectionLabelName] = null;
+    labels[serverConfig.istioLabels.injectionLabelRev] = revision;
+  } else {
+    labels[serverConfig.istioLabels.injectionLabelName] = remove ? null : enable ? 'enabled' : 'disabled';
+    labels[serverConfig.istioLabels.injectionLabelRev] = null;
+  }
   const patch = {
     metadata: {
       labels: labels

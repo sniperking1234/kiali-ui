@@ -37,15 +37,16 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
       color: '#fff',
       backgroundColor: '#003145',
       width: contentWidth,
-      height: '71px',
+      height: '80px',
       padding: '5px',
       resize: 'none',
       overflowY: 'hidden'
     });
     const preface =
       'You can use the Find and Hide fields to highlight or hide graph edges and nodes. Each field accepts ' +
-      'expressions using the language described below. Hide takes precedence when using Find and Hide ' +
-      'together. Uncheck the "Compress Hidden" display option for hidden elements to retain their space.';
+      'expressions using the language described below. Preset expressions are available via the dropdown. ' +
+      'Hide takes precedence when using Find and Hide together. Uncheck the "Compressed Hide" Display ' +
+      'option for hidden elements to retain their space.';
 
     return (
       <>
@@ -72,29 +73,18 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
             <>
               <textarea className={`${prefaceStyle}`} readOnly={true} value={preface} />
               <SimpleTabs id="graph_find_help_tabs" defaultTab={0} style={{ width: contentWidth }}>
-                <Tab style={tabFont} eventKey={0} title="Usage Notes">
+                <Tab style={tabFont} eventKey={0} title="Examples">
                   <Table
                     header={<></>}
                     variant={TableVariant.compact}
-                    cells={this.noteColumns()}
-                    rows={this.noteRows()}
+                    cells={this.exampleColumns()}
+                    rows={this.exampleRows()}
                   >
                     <TableHeader />
                     <TableBody />
                   </Table>
                 </Tab>
-                <Tab style={tabFont} eventKey={1} title="Operators">
-                  <Table
-                    header={<></>}
-                    variant={TableVariant.compact}
-                    cells={this.operatorColumns()}
-                    rows={this.operatorRows()}
-                  >
-                    <TableHeader />
-                    <TableBody />
-                  </Table>
-                </Tab>
-                <Tab style={tabFont} eventKey={2} title="Nodes">
+                <Tab style={tabFont} eventKey={1} title="Nodes">
                   <Table
                     header={<></>}
                     variant={TableVariant.compact}
@@ -105,7 +95,7 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
                     <TableBody />
                   </Table>
                 </Tab>
-                <Tab style={tabFont} eventKey={3} title="Edges">
+                <Tab style={tabFont} eventKey={2} title="Edges">
                   <Table
                     header={<></>}
                     variant={TableVariant.compact}
@@ -116,12 +106,23 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
                     <TableBody />
                   </Table>
                 </Tab>
-                <Tab style={tabFont} eventKey={4} title="Examples">
+                <Tab style={tabFont} eventKey={3} title="Operators">
                   <Table
                     header={<></>}
                     variant={TableVariant.compact}
-                    cells={this.exampleColumns()}
-                    rows={this.exampleRows()}
+                    cells={this.operatorColumns()}
+                    rows={this.operatorRows()}
+                  >
+                    <TableHeader />
+                    <TableBody />
+                  </Table>
+                </Tab>
+                <Tab style={tabFont} eventKey={4} title="Usage Notes">
+                  <Table
+                    header={<></>}
+                    variant={TableVariant.compact}
+                    cells={this.noteColumns()}
+                    rows={this.noteRows()}
                   >
                     <TableHeader />
                     <TableBody />
@@ -142,16 +143,19 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
   };
   private edgeRows = (): string[][] => {
     return [
+      ['destprincipal <op> <principal>'],
       ['grpc <op> <number>', 'unit: requests per second'],
       ['%grpcerr <op> <number>', 'range: [0..100]'],
       ['%grpctraffic <op> <number>', 'range: [0..100]'],
       ['http <op> <number>', 'unit: requests per second'],
       ['%httperr <op> <number>', 'range: [0..100]'],
       ['%httptraffic <op> <number>', 'range: [0..100]'],
-      ['protocol <op> <protocol>', 'grpc, http, tcp, etc..'],
-      ['responsetime <op> <number>', `unit: millis, will auto-enable 'response time' edge labels`],
-      ['tcp <op> <number>', 'unit: requests per second'],
       ['mtls', `will auto-enable 'security' display option`],
+      ['protocol <op> <protocol>', 'grpc, http, tcp, etc..'],
+      ['responsetime <op> <number>', `unit: millis, will auto-enable 'P95 response time' edge labels`],
+      ['sourceprincipal <op> <principal>'],
+      ['tcp <op> <number>', 'unit: bytes per second'],
+      ['throughput <op> <number>', `unit: bytes per second, will auto-enable 'request throughput' edge labels`],
       ['traffic', 'any traffic for any protocol']
     ];
   };
@@ -166,12 +170,12 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
       ['app startswith product', `nodes with app label starting with 'product'`],
       ['app != details and version=v1', `nodes with app label not equal to 'details' and with version equal to 'v1'`],
       ['!sc', `nodes without a sidecar`],
-      ['httpin > 0.5', `nodes with incoming http rate > 0.5 rps`],
-      ['tcpout >= 1000', `nodes with outgoing tcp rates >= 1000 bps`],
+      ['httpin > 0.5', `nodes with inbound http rate > 0.5 rps`],
+      ['tcpout >= 1000', `nodes with outbound tcp rates >= 1000 bps`],
       ['!traffic', 'edges with no traffic'],
       ['http > 0.5', `edges with http rate > 0.5 rps`],
       ['rt > 500', `edges with response time > 500ms. (requires response time edge labels)`],
-      ['%httptraffic >= 50.0', `edges with >= 50% of the outgoing http request traffic of the parent`],
+      ['%httptraffic >= 50.0', `edges with >= 50% of the outbound http request traffic of the parent`],
       ['node = svc and svc startswith det or !traffic', 'service node starting with "det" or edges with no traffic']
     ];
   };
@@ -186,6 +190,7 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
       ['httpin <op> <number>', 'unit: requests per second'],
       ['httpout <op> <number>', 'unit: requests per second'],
       ['app <op> <appName>'],
+      ['cluster <op> <clusterName>'],
       ['name <op> <string>', 'tests against app label, operation, service and workload names'],
       ['namespace <op> <namespaceName>'],
       ['node <op> <nodeType>', 'nodeType: app | operation | service | workload | unknown'],
@@ -196,12 +201,17 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
       ['tcpout <op> <number>', 'unit: bytes per second'],
       ['workload <op> <workloadName>'],
       ['circuitbreaker'],
+      ['faultinjection'],
       ['healthy', 'is not degraded or failing.'],
       ['idle', `will auto-enable 'idle nodes' display option`],
       ['outside', 'is outside of requested namespaces'],
+      ['requestrouting'],
+      ['requesttimeout'],
       ['sidecar'],
       ['serviceentry'],
-      ['trafficsource', `has only outgoing edges`],
+      ['tcptrafficshifting'],
+      ['trafficshifting'],
+      ['trafficsource', `has only outbound edges`],
       ['virtualservice']
     ];
   };
@@ -217,11 +227,12 @@ export default class GraphHelpFind extends React.Component<GraphHelpFindProps> {
       ['Use "<operand> = NaN" to test for no activity. Use "!= NaN" for any activity. (e.g. httpout = NaN)'],
       [`Unary operands may optionally be prefixed with "is" or "has". (i.e. "has mtls")`],
       ['The "name" operand expands internally to an "OR" expression (an "AND" when negated).'],
-      ['Abbrevations: namespace|ns, service|svc, workload|wl operation|op'],
-      ['Abbrevations: circuitbreaker|cb, responsetime|rt, serviceentry->se, sidecar|sc, virtualservice|vs'],
+      ['Abbreviate: ns|namespace, svc|service, se|serviceentry, wl|workload, op|operation'],
+      ['Abbreviate: rt|responsetime, sc|sidecar, vs|virtualservice'],
+      ['Abbreviate: cb|circuitbreaker, fi|faultinjection, rr|requestrouting, rto|requesttimeout, ts|trafficshifting'],
       ['Hiding nodes will automatically hide connected edges.'],
       ['Hiding edges will automatically hide nodes left with no visible edges.'],
-      ['Hiding "healthy"ss nodes may still leave valid, healthy edges in the graph.']
+      ['Hiding "healthy" nodes may still leave valid, healthy edges in the graph.']
     ];
   };
 
